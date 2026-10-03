@@ -351,7 +351,7 @@ function payGuideHtml(o){
         <button class="btn btn-large pay-tail-btn" onclick="copyText('${t}')">复制这 4 位</button>
       </div>
 
-      <div class="pay-why">填上这 4 位，我一看到账就知道是你的单，不用再来回问你订单号。</div>
+      <div class="pay-why">填上这 4 位，我一看到账就知道钱是你付的。<b>但订单内容我这边看不到</b> —— 所以付款后还有第 ② 步。</div>
 
       <div class="pay-or"><span>然后扫码付款</span></div>
 
@@ -361,6 +361,18 @@ function payGuideHtml(o){
       </div>
 
       <button class="btn-ghost" onclick="copyReceipt('${o.id}')">复制「已转账」回执发给客服</button>
+
+      <!-- 第 ② 步不能少：订单只存在客户这台设备上，我这边没有。
+           放进付款卡里，客户不会漏看 —— 漏看就等于我收了钱不知道是谁的单。 -->
+      <div class="pay-handoff">
+        <div class="pay-handoff-h">② 付完款，把订单信息发我一次</div>
+        <div class="pay-handoff-d">
+          订单只存在你这台设备的浏览器里，<b>我这边看不到</b>。<br>
+          点一下，选微信发给我就行，不用一条条打。
+        </div>
+        <button class="btn btn-large" onclick="shareOrderInfo()">发给客服（一键分享）</button>
+        <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>
+      </div>
     </div>`
 }
 

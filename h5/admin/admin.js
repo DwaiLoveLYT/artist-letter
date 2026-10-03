@@ -217,6 +217,133 @@ function doReconcile(){
     </div>`
 }
 
+// ==================== 收款台 · 粘贴对账 ====================
+// 思路：不去猜「什么样的字符串算订单号」，而是反过来——
+// 拿台账里**真实存在的尾号**去文本里找。认出来的必然是对的，零误判。
+
+let reconHits = []          // 本次识别出的尾号
+let reconSel  = new Set()   // 勾选了哪几个
+
+function scanTails(text){
+  const src = String(text || '')
+  const found = [], seen = new Set()
+
+  // ① 先认完整订单号（AL + 8位日期 + 6位），最精确
+  const reFull = /AL\s?\d{8}\s?([A-Za-z0-9]{6})/gi
+  let m
+  while((m = reFull.exec(src))){
+    const t = m[1].slice(-4).toUpperCase()
+    if(!seen.has(t)){ seen.add(t); found.push(t) }
+  }
+
+  // ② 再逐个拿台账里的尾号去文本里比对（避免把金额、日期误当成尾号）
+  allOrders().forEach(o => {
+    const t = tail(o.order_no)
+    if(!t || t.length < 4 || seen.has(t)) return
+    const re = new RegExp('(^|[^A-Za-z0-9])' + t + '([^A-Za-z0-9]|$)', 'i')
+    if(re.test(src)){ seen.add(t); found.push(t) }
+  })
+
+  return found
+}
+
+function openReconPaste(){
+  reconHits = []; reconSel = new Set()
+  openSheet(`
+    <div class="sh-title">粘贴对账</div>
+    <div class="sh-sub">把客户发来的消息、或微信账单里那段文字，整段粘进来。<br>
+      我把里面的订单号挑出来，一次给你确认。</div>
+    <textarea class="sh-textarea" id="recon-paste" placeholder="【艺人代寄 · 下单信息】&#10;订单号：AL20261003A7K2&#10;艺人：Johnny Depp&#10;…"></textarea>
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="runPasteRecon()">开始识别</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">取消</button>
+    <div id="recon-out"></div>
+  `)
+  setTimeout(() => { const ta = document.getElementById('recon-paste'); if(ta) ta.focus() }, 320)
+}
+
+function runPasteRecon(){
+  const ta  = document.getElementById('recon-paste')
+  const out = document.getElementById('recon-out')
+  const text = ((ta && ta.value) || '').trim()
+  if(!text){ toast('先把内容粘进来'); return }
+
+  reconHits = scanTails(text)
+  reconSel  = new Set()
+
+  if(!reconHits.length){
+    const n = allOrders().length
+    out.innerHTML =
+      '<div class="hint" style="color:#EF9F27; line-height:1.8; margin-top:16px">'
+      + '这段文字里没认出订单号。<br>'
+      + '① 客户发来的信息里带订单号吗？没有的话，让他点他页面上的「复制下单信息」再发一次。<br>'
+      + '② 这一单录进台账了吗？没录过的话，先用上面的「新建订单」粘进来。<br>'
+      + '台账目前共 <b>' + n + '</b> 单。</div>'
+    return
+  }
+
+  // 默认勾选「还没收款」的，已收款的不重复勾
+  const list = allOrders()
+  reconHits.forEach(t => {
+    const o = list.find(x => tail(x.order_no) === t)
+    if(o && o.pay_status !== 'paid') reconSel.add(t)
+  })
+  paintRecon()
+}
+
+function paintRecon(){
+  const list = allOrders()
+  const out  = document.getElementById('recon-out')
+
+  const rows = reconHits.map(t => {
+    const o = list.find(x => tail(x.order_no) === t)
+    if(!o){
+      return '<div class="rc-row off"><div class="rc-box">?</div>'
+        + '<div class="rc-body"><div class="rc-no">' + esc(t) + '</div>'
+        + '<div class="rc-meta">这个尾号不在台账里</div></div></div>'
+    }
+    const paid = o.pay_status === 'paid'
+    const on   = !paid && reconSel.has(t)
+    return '<div class="rc-row ' + (paid ? 'off' : '') + '"'
+      + (paid ? '' : ' onclick="toggleRecon(\'' + t + '\')"') + '>'
+      + '<div class="rc-box ' + (on || paid ? 'on' : '') + '">' + (on || paid ? '✓' : '') + '</div>'
+      + '<div class="rc-body">'
+      + '<div class="rc-no">' + esc(t) + ' <small>' + esc(o.artist || '未填艺人') + '</small></div>'
+      + '<div class="rc-meta">' + esc(o.customer_name || '未填称呼') + ' · ' + fmt(o.created_at) + ' 下单'
+      + (paid ? ' · <span style="color:#5DCAA5">已收款</span>' : '') + '</div>'
+      + '</div></div>'
+  }).join('')
+
+  const n = reconSel.size
+  out.innerHTML =
+    '<div class="rc-head">认出 ' + reconHits.length + ' 个订单号</div>'
+    + '<div class="rc-list">' + rows + '</div>'
+    + (n
+        ? '<button class="btn-full" onclick="confirmRecon()">✓ 确认这 ' + n + ' 笔收款 · ¥' + n * PRICE + '</button>'
+        : '<div class="hint" style="color:#5DCAA5">认出来的单都已经确认过收款了</div>')
+}
+
+function toggleRecon(t){
+  if(reconSel.has(t)) reconSel.delete(t); else reconSel.add(t)
+  paintRecon()
+}
+
+function confirmRecon(){
+  const list = allOrders()
+  let n = 0
+  reconSel.forEach(t => {
+    const o = list.find(x => tail(x.order_no) === t)
+    if(!o || o.pay_status === 'paid') return
+    updOrder(o.id, { pay_status:'paid', status: o.status === 'created' ? 'paid' : o.status })
+    log(o.id, '确认收款 ¥' + PRICE + '（粘贴对账）')
+    n++
+  })
+  closeSheet()
+  toast('已确认 ' + n + ' 笔 · ¥' + n * PRICE)
+  renderList()
+}
+
 // ==================== 新建订单（粘贴客户信息） ====================
 const FIELD_MAP = {
   订单号:'order_no', 艺人:'artist', 收信国家:'country', 收信地址:'recipient_addr',

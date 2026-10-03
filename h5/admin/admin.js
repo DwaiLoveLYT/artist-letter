@@ -55,6 +55,10 @@ function fmtDay(ts){
 function esc(s){ return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 function tail(no){ return (no || '').slice(-4).toUpperCase() }
 
+// 「待查地址」= 客户把地址交给我查，而这一单还没查到。
+// 一旦我把查到的地址填进去，它就自动从待办里消失 —— 不用手动销项。
+function needLookup(o){ return !!o.addr_lookup && !String(o.recipient_addr || '').trim() }
+
 let toastTimer = null
 function toast(msg){
   const el = document.getElementById('toast')
@@ -419,6 +423,7 @@ function renderBoard(){
   const unpaid = list.filter(o => o.pay_status !== 'paid').length
   const toStart = list.filter(o => o.status === 'paid').length
   const drawing = list.filter(o => o.status === 'drawing').length
+  const lookup  = list.filter(needLookup).length
   const income = list.filter(o => o.pay_status === 'paid').length * PRICE
 
   const tile = (num, label, cls, filter) =>
@@ -430,7 +435,8 @@ function renderBoard(){
     tile(unpaid, '待收款', unpaid > 0 ? 'alert' : '', 'unpaid') +
     tile(toStart, '待开工', '', 'paid') +
     tile(drawing, '绘制中', '', 'drawing') +
-    tile('¥' + income, '累计收款', 'good', 'all')
+    tile('¥' + income, '累计收款', 'good', 'all') +
+    tile(lookup, '待查地址', lookup > 0 ? 'alert' : '', 'lookup')
 }
 
 function quickFilter(key){
@@ -690,6 +696,14 @@ const FIELD_MAP = {
   我的称呼:'customer_name', 手机号:'customer_phone', 回信地址:'return_addr', 备注:'letter_note',
 }
 
+// 占位符不是内容：'-'、'（未填）'、'（客户未填…）' 都要还原成空字符串，
+// 否则「地址待查」的单会被一个假地址糊过去，待办就销不掉。
+function dePlaceholder(v){
+  const s = String(v || '').trim()
+  if(!s || s === '-') return ''
+  return /^[（(][^）)]*[）)]$/.test(s) ? '' : s
+}
+
 function parseOrderText(text){
   const o = {}
   String(text || '').split('\n').forEach(line => {
@@ -697,8 +711,9 @@ function parseOrderText(text){
     if(!m) return
     const key = m[1].replace(/^【|】$/g,'').trim()
     const val = m[2].trim()
-    if(FIELD_MAP[key]) o[FIELD_MAP[key]] = val
+    if(FIELD_MAP[key]) o[FIELD_MAP[key]] = dePlaceholder(val)
     if(key === '信的来源') o.letter_source = val.indexOf('代写') >= 0 ? 'proxy' : 'self'
+    if(key === '地址代查') o.addr_lookup = val.indexOf('需要') >= 0
   })
   return o
 }
@@ -752,7 +767,13 @@ function renderOrderForm(data){
     ${row('n-artist','艺人 *', draft.artist, '例如 Johnny Depp')}
     ${row('n-country','收信国家', draft.country, '例如 United States')}
     <div class="mini-field"><div class="mini-label">收信地址</div>
-      <textarea class="sh-textarea" id="n-recipient" style="min-height:76px" placeholder="艺人工作室 / Fan mail 地址">${esc(draft.recipient_addr || '')}</textarea></div>
+      <textarea class="sh-textarea" id="n-recipient" style="min-height:76px" placeholder="艺人工作室 / Fan mail 地址">${esc(draft.recipient_addr || '')}</textarea>
+      <div class="mini-hint">客户委托我查地址的话，这里可以先留空 —— 查到了再回来补</div></div>
+    <div class="mini-field"><div class="mini-label">地址代查</div>
+      <select class="input" id="n-lookup">
+        <option value="no">不需要 · 客户已给地址，直接寄</option>
+        <option value="yes">地址待查 · 我负责查这位艺人最新的收信地址</option>
+      </select></div>
     ${row('n-name','客户称呼', draft.customer_name)}
     ${row('n-phone','客户手机 / 微信', draft.customer_phone)}
     <div class="mini-field"><div class="mini-label">回信地址</div>
@@ -772,6 +793,8 @@ function renderOrderForm(data){
   setTimeout(() => {
     const sel = document.getElementById('n-src')
     if(sel) sel.value = draft.letter_source || 'self'
+    const lk = document.getElementById('n-lookup')
+    if(lk) lk.value = draft.addr_lookup ? 'yes' : 'no'
   }, 40)
 }
 
@@ -784,6 +807,7 @@ function saveNewOrder(){
     artist,
     country: document.getElementById('n-country').value.trim(),
     recipient_addr: document.getElementById('n-recipient').value.trim(),
+    addr_lookup: document.getElementById('n-lookup').value === 'yes',
     customer_name: document.getElementById('n-name').value.trim(),
     customer_phone: document.getElementById('n-phone').value.trim(),
     return_addr: document.getElementById('n-return').value.trim(),
@@ -807,6 +831,7 @@ const openIds = new Set()   // 记住哪些订单卡是展开的，重渲染后�
 const CHIPS = [
   { f:'all',     label:'全部' },
   { f:'unpaid',  label:'待收款' },
+  { f:'lookup',  label:'待查地址' },
   { f:'paid',    label:'待开工' },
   { f:'drawing', label:'绘制中' },
   { f:'mailed',  label:'已寄出' },
@@ -817,6 +842,7 @@ function countOf(f){
   const list = allOrders()
   if(f === 'all')     return list.length
   if(f === 'unpaid')  return list.filter(o => o.pay_status !== 'paid').length
+  if(f === 'lookup')  return list.filter(needLookup).length
   return list.filter(o => o.status === f).length
 }
 
@@ -848,6 +874,7 @@ function renderList(){
 
   let list = allOrders().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))
   if(filterKey === 'unpaid')      list = list.filter(o => o.pay_status !== 'paid')
+  else if(filterKey === 'lookup') list = list.filter(needLookup)
   else if(filterKey !== 'all')    list = list.filter(o => o.status === filterKey)
   if(kw) list = list.filter(o => match(o, kw))
 
@@ -870,6 +897,8 @@ function orderCard(o){
   const cls = o.status === 'done' ? 'done' : (paid ? 'paid' : 'unpaid')
   const media = Array.isArray(o.media) ? o.media : []
   const logs  = Array.isArray(o.logs)  ? o.logs  : []
+  const lookup = needLookup(o)
+  const addrText = String(o.recipient_addr || '').trim()
 
   return `
   <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''}" id="od-${o.id}">
@@ -881,6 +910,8 @@ function orderCard(o){
       <div class="o-tags">
         <span class="tag ${paid ? 'green' : 'amber'}">${paid ? '已收款' : '待收款'}</span>
         <span class="tag sage">${statusLabel(o.status)}</span>
+        ${lookup ? '<span class="tag amber">地址待查</span>'
+                 : (o.addr_lookup ? '<span class="tag sage">代查地址</span>' : '')}
       </div>
     </div>
 
@@ -890,7 +921,10 @@ function orderCard(o){
     </div>
 
     <div class="o-detail">
-      <div class="d-row"><div class="d-key">收信地址</div><div class="d-val">${esc(o.recipient_addr || '-')}</div></div>
+      <div class="d-row"><div class="d-key">收信地址</div><div class="d-val">${
+        addrText ? esc(addrText)
+        : (o.addr_lookup ? '<b style="color:#EF9F27">待查 · 客户委托我查最新地址</b>' : '-')
+      }</div></div>
       <div class="d-row"><div class="d-key">回信地址</div><div class="d-val">${esc(o.return_addr || '-')}</div></div>
       <div class="d-row"><div class="d-key">信件来源</div><div class="d-val">${o.letter_source === 'proxy' ? '需要代写（费用另议）' : '客户自己手写'}</div></div>
       ${o.letter_note ? `<div class="d-note"><b style="color:#8a8a82">客户备注：</b><br>${esc(o.letter_note)}</div>` : ''}
@@ -912,6 +946,7 @@ function orderCard(o){
 
       <div class="o-ops">
         ${!paid ? `<button class="op primary" onclick="markPaid('${o.id}')">✓ 确认收款</button>` : ''}
+        <button class="op ${lookup ? 'primary' : ''}" onclick="sheetAddr('${o.id}')">${lookup ? '📍 补地址' : '改地址'}</button>
         <button class="op" onclick="sheetStatus('${o.id}')">改状态</button>
         <button class="op" onclick="sheetNote('${o.id}')">留言</button>
         <button class="op" onclick="sheetMedia('${o.id}')">存凭证</button>
@@ -984,6 +1019,30 @@ function saveNote(id){
   closeSheet(); toast('已保存'); renderList()
 }
 
+// 补 / 改收信地址 —— 客户委托代查的单，查到了要能填回来，否则「待查」永远销不掉
+function sheetAddr(id){
+  const o = getOrder(id); if(!o) return
+  openSheet(`
+    <div class="sh-title">${needLookup(o) ? '补上收信地址' : '修改收信地址'}</div>
+    <div class="sh-sub">${esc(o.artist || '')} · 尾号 ${esc(tail(o.order_no))}<br>${
+      needLookup(o) ? '查到了就填这里，填完「待查地址」自动销掉。' : '改完直接生效。'}</div>
+    <textarea class="sh-textarea" id="addr-input" style="min-height:96px" placeholder="艺人工作室 / Fan mail 地址（英文）">${esc(o.recipient_addr || '')}</textarea>
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="saveAddr('${id}')">保存地址</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">取消</button>
+  `)
+  setTimeout(() => { const t = document.getElementById('addr-input'); if(t) t.focus() }, 280)
+}
+function saveAddr(id){
+  const o = getOrder(id); if(!o) return
+  const v = (document.getElementById('addr-input').value || '').trim()
+  if(!v){ toast('地址不能为空'); return }
+  updOrder(id, { recipient_addr: v })
+  log(id, o.addr_lookup ? '补上代查地址' : '更新收信地址')
+  closeSheet(); toast('地址已保存'); renderList()
+}
+
 function sheetMedia(id){
   openSheet(`
     <div class="sh-title">存凭证</div>
@@ -1035,7 +1094,8 @@ function fullText(o){
     '【订单】' + o.order_no,
     '艺人：' + (o.artist || '-'),
     '收信国家：' + (o.country || '-'),
-    '收信地址：' + (o.recipient_addr || '-'),
+    '收信地址：' + (String(o.recipient_addr || '').trim() || (o.addr_lookup ? '（待查 · 我负责查最新地址）' : '-')),
+    '地址代查：' + (o.addr_lookup ? '需要' : '不需要'),
     '称呼：' + (o.customer_name || '-'),
     '手机：' + (o.customer_phone || '-'),
     '回信地址：' + (o.return_addr || '-'),
@@ -1049,6 +1109,7 @@ function copyFull(id){ const o = getOrder(id); if(o) copy(fullText(o)) }
 
 function copyShip(id){
   const o = getOrder(id); if(!o) return
+  if(needLookup(o)){ toast('这一单地址还没查 · 先把查到的地址填进去再复制'); return }
   copy([
     '寄件信息 · ' + tail(o.order_no),
     '收件人：' + (o.artist || ''),

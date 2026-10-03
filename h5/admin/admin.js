@@ -447,14 +447,22 @@ function doReconcile(){
   const t = box.value.trim().toUpperCase()
   if(t.length !== 4){ out.innerHTML = '<div class="hint" style="color:#EF9F27">请输入 4 位字母/数字</div>'; return }
 
-  const hits = allOrders().filter(o => tail(o.order_no) === t)
+  const list = allOrders()
+  const hits = list.filter(o => tail(o.order_no) === t)
   if(!hits.length){
-    const n = allOrders().length
+    const tails = list.map(o => tail(o.order_no))
+    const shown = tails.slice(0, 12)
     out.innerHTML =
-      '<div class="hint" style="color:#EF9F27; line-height:1.75">没找到这个尾号。<br>'
-      + '① 这一单录进台账了吗？客户在他自己手机上下单，<b>不会</b>自动进你台账——'
-      + '要把客户发来的下单信息，用上面的「新建订单」粘进来。<br>'
-      + '② 台账目前共 <b>' + n + '</b> 单。</div>'
+      '<div class="hint" style="color:#EF9F27; line-height:1.85">'
+      + '本机台账里没有尾号 <b>' + esc(t) + '</b>。<br>'
+      + (list.length
+          ? '这台设备上现有的尾号：<br><b style="letter-spacing:1px">'
+            + shown.map(esc).join('　') + (tails.length > shown.length ? ' …' : '') + '</b><br>'
+            + '对不上，说明这一单还没录进来。'
+          : '<b>这台设备上一条订单都没有。</b><br>'
+            + '那基本可以确定：你下单用的浏览器 / 网址，和现在开后台的不是同一个。')
+      + '</div>'
+      + '<button class="btn-full grey" style="margin-top:10px" onclick="showSelfCheck()">看看本机自检 ›</button>'
     return
   }
   const o = hits[0]
@@ -470,6 +478,83 @@ function doReconcile(){
         ? '<div class="hint" style="color:#5DCAA5">这单已经标记过了</div>'
         : `<button class="btn-full" style="margin-top:10px" onclick="markPaid('${o.id}', true)">✓ 确认收到 ¥${PRICE}</button>`}
     </div>`
+}
+
+// ==================== 本机台账状态 · 自检 ====================
+// 订单只存在「下单那台设备的那个浏览器」里。
+// 查不到时，九成不是 bug，是设备 / 浏览器 / 网址对不上。
+// 所以这里做两件事：① 一眼看出本机有几单 ② 点尾号直接查。
+
+function renderLocalStrip(){
+  const el = document.getElementById('local-strip')
+  if(!el) return
+  const list = allOrders().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))
+
+  if(!list.length){
+    el.innerHTML = '<div class="strip-empty">本机台账 <b>0</b> 单 · 这台设备上还没有任何订单</div>'
+    return
+  }
+  const shown = list.slice(0, 10)
+  el.innerHTML =
+    '<div class="strip-head"><span>本机台账 <b>' + list.length + '</b> 单 · 点尾号直接查</span>'
+    + '<button class="strip-info" onclick="showSelfCheck()">自检</button></div>'
+    + '<div class="strip-tails">'
+    + shown.map(o =>
+        '<button class="tail-chip" onclick="fillRecon(\'' + tail(o.order_no) + '\')">'
+        + esc(tail(o.order_no)) + '</button>').join('')
+    + (list.length > shown.length
+        ? '<span class="strip-more">还有 ' + (list.length - shown.length) + ' 单</span>' : '')
+    + '</div>'
+}
+
+function fillRecon(t){
+  const box = document.getElementById('recon')
+  if(!box) return
+  box.value = t
+  doReconcile()
+  const out = document.getElementById('recon-result')
+  if(out) setTimeout(() => out.scrollIntoView({ behavior:'smooth', block:'center' }), 90)
+}
+
+function showSelfCheck(){
+  const list = allOrders()
+  openSheet(`
+    <div class="sh-title">本机自检</div>
+    <div class="sh-sub">查不到订单时先看这里 —— 九成是设备或网址对不上，不是系统坏了。</div>
+
+    <div class="chk-row"><div class="chk-key">后台域名</div><div class="chk-val mono">${esc(location.hostname)}</div></div>
+    <div class="chk-row"><div class="chk-key">后台路径</div><div class="chk-val mono">${esc(location.pathname)}</div></div>
+    <div class="chk-row"><div class="chk-key">本机台账</div><div class="chk-val">${list.length} 单</div></div>
+    <div class="chk-row"><div class="chk-key">现有尾号</div><div class="chk-val mono">${
+      list.length ? list.slice(0, 12).map(o => esc(tail(o.order_no))).join(' ') : '（无）'
+    }</div></div>
+
+    <div class="hint" style="margin-top:15px; line-height:1.85">
+      订单只存在<b>下单那台设备的那个浏览器</b>里。<br><br>
+      ① <b>换浏览器就断了</b> —— 微信里打开、和 Safari / Chrome 里打开，数据是分开的。<br>
+      ② <b>换网址也断了</b> —— 上面这个域名，要和你开客户页时地址栏里那个一致。<br>
+      ③ 客户在<b>他自己</b>手机上下单，永远不会自动进你这里。<br><br>
+      要让订单进来：让客户点他页面上的「复制下单信息」发给你，
+      你用上面的「新建订单」粘进来。
+    </div>
+
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="copySelfCheck()">复制这段诊断信息</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">知道了</button>
+  `)
+}
+
+function copySelfCheck(){
+  const list = allOrders()
+  copy([
+    '【接单台账 · 本机自检】',
+    '后台域名：' + location.hostname,
+    '后台路径：' + location.pathname,
+    '本机台账：' + list.length + ' 单',
+    '现有尾号：' + (list.length ? list.slice(0, 20).map(o => tail(o.order_no)).join(' ') : '无'),
+    '时间：' + new Date().toLocaleString('zh-CN'),
+  ].join('\n'))
 }
 
 // ==================== 收款台 · 粘贴对账 ====================
@@ -660,7 +745,10 @@ function renderOrderForm(data){
   openSheet(`
     <div class="sh-title">确认订单信息</div>
     <div class="sh-sub">核对一下，缺的可以补。带 * 的必填。</div>
-    ${row('n-order','订单号', draft.order_no)}
+    <div class="mini-field"><div class="mini-label">订单号</div>
+      <input class="input" id="n-order" value="${esc(draft.order_no || '')}">
+      <div class="mini-hint">客户已经下过单的话，把他那串原样填进来 —— 改了尾号就对不上了</div>
+    </div>
     ${row('n-artist','艺人 *', draft.artist, '例如 Johnny Depp')}
     ${row('n-country','收信国家', draft.country, '例如 United States')}
     <div class="mini-field"><div class="mini-label">收信地址</div>
@@ -755,7 +843,7 @@ function match(o, kw){
 }
 
 function renderList(){
-  renderBoard(); renderChips()
+  renderBoard(); renderChips(); renderLocalStrip()
   const kw = (document.getElementById('kw').value || '').trim().toUpperCase()
 
   let list = allOrders().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))

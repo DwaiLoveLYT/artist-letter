@@ -40,11 +40,17 @@
     <!-- 新建订单 -->
     <button class="btn-full" style="margin-bottom:12px;" onclick="openNewOrder()">＋ 新建订单（粘贴客户信息）</button>
 
-    <!-- 快速对账 -->
+    <!-- 收款台 -->
     <div class="card card-accent">
-      <div class="card-head"><span class="pulse"></span>快速对账</div>
+      <div class="card-head"><span class="pulse"></span>收款台</div>
+
+      <button class="btn-full" onclick="openReconPaste()">📋 粘贴对账 · 一次认一批</button>
+      <div class="hint" style="margin:9px 0 0;">客户发来的消息、或微信账单里的文字，整段粘进来，我自动把里面的订单号挑出来</div>
+
+      <div class="recon-or"><span>或 直接输尾号</span></div>
+
       <div class="recon-row">
-        <input class="input" id="recon" maxlength="4" inputmode="text" placeholder="转账备注后 4 位" autocomplete="off">
+        <input class="input" id="recon" maxlength="4" inputmode="text" placeholder="订单号后 4 位" autocomplete="off">
         <button class="btn-sm" onclick="doReconcile()">查找</button>
       </div>
       <div class="hint">只对「已录进台账」的订单有效。没录过的单，先用上面的「新建订单」粘进来。</div>

@@ -52,7 +52,6 @@ let lastOrderId=''
 function goPage(name, param){
   if(name==='detail' && param){ renderDetail(param); lastOrderId=param }
   if(name==='track') renderTrack()
-  if(name==='admin') renderAdmin()
 
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
   const page=document.getElementById('page-'+name)

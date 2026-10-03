@@ -346,67 +346,6 @@
   </div>
 </section>
 
-<!-- ==================== 管理台账 ==================== -->
-<section class="page" id="page-admin">
-  <div class="nav-bar">
-    <button class="nav-back" onclick="goPage('home')">←</button>
-    <span>接单台账</span>
-  </div>
-  <div class="wrap">
-    <div class="admin-header">
-      <div class="admin-title">本地台账</div>
-      <div class="admin-sub">数据只存在这台手机，换手机不迁移</div>
-    </div>
-
-    <div class="stats-row">
-      <div class="stat-box">
-        <div class="stat-num" id="a-stat-unpaid">0</div>
-        <div class="stat-label">待付款</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="a-stat-draw">0</div>
-        <div class="stat-label">绘制中</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="a-stat-mail">0</div>
-        <div class="stat-label">已寄出</div>
-      </div>
-    </div>
-
-    <div class="admin-actions">
-      <button class="btn" onclick="adminPaste()">📋 粘贴客户信息</button>
-      <button class="btn-ghost" onclick="adminExport()">📤 导出备份</button>
-    </div>
-
-    <div class="card" style="background:linear-gradient(135deg, #1e2a22 0%, #1a1a19 100%); border-color:rgba(93,202,165,0.15);">
-      <div style="font-size:13px; font-weight:600; color:#5DCAA5; margin-bottom:10px;">💰 快速对账</div>
-      <div style="display:flex; gap:8px;">
-        <input class="input" id="a-reconcile" style="flex:1; margin-bottom:0;" placeholder="输入微信转账备注的后 4 位" maxlength="4">
-        <button class="btn" style="width:auto; padding:12px 20px; margin-bottom:0;" onclick="adminReconcile()">查找</button>
-      </div>
-      <div class="tiny" style="margin-top:8px;">收到转账后直接输备注里的数字，一键定位订单</div>
-      <div id="reconcile-result" style="margin-top:10px;"></div>
-    </div>
-
-    <div class="filter" style="margin-top:16px;">
-      <div class="chip on" data-filter="all" onclick="adminFilter(this)">全部</div>
-      <div class="chip" data-filter="created" onclick="adminFilter(this)">待付款</div>
-      <div class="chip" data-filter="paid" onclick="adminFilter(this)">未开工</div>
-      <div class="chip" data-filter="drawing" onclick="adminFilter(this)">绘制中</div>
-      <div class="chip" data-filter="mailed" onclick="adminFilter(this)">已寄出</div>
-      <div class="chip" data-filter="done" onclick="adminFilter(this)">已完成</div>
-    </div>
-
-    <input class="input" style="margin-bottom:10px;" id="a-keyword" placeholder="搜订单号后 4 位 / 艺人 / 手机号" oninput="adminSearch()">
-
-    <div id="admin-list"></div>
-    <div class="empty-state" id="admin-empty" style="display:none;">
-      <div class="empty-icon">🔍</div>
-      <div class="empty-title">没有匹配订单</div>
-    </div>
-  </div>
-</section>
-
 <!-- Toast -->
 <div id="toast"></div>
 

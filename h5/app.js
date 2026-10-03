@@ -513,4 +513,19 @@ function fieldError(id, msg){
 }
 
 // ==================== 启动 ====================
-window.addEventListener('DOMContentLoaded',()=>{ initHome(); goPage('home') })
+// 顶部信任条是吸顶的，页面导航栏也吸顶。两条都 top:0 就会叠在一起，
+// 把返回键压在下面。这里实测信任条高度写进 CSS 变量，让导航栏贴在它下面。
+function syncTrustBarHeight(){
+  const tb=document.querySelector('.trust-bar')
+  if(!tb) return
+  const h=tb.offsetHeight
+  if(h>0) document.documentElement.style.setProperty('--trustbar-h', h+'px')
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  syncTrustBarHeight()
+  initHome()
+  goPage('home')
+})
+window.addEventListener('resize', syncTrustBarHeight)
+window.addEventListener('orientationchange', syncTrustBarHeight)

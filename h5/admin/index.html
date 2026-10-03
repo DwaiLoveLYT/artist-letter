@@ -11,17 +11,9 @@
 </head>
 <body>
 
-<!-- ==================== 锁屏 ==================== -->
+<!-- ==================== 锁屏（内容由 renderLock 按步骤渲染） ==================== -->
 <div class="lock" id="lock">
-  <div class="lock-inner">
-    <div class="lock-logo">DWAY</div>
-    <div class="lock-title" id="lock-title">输入密码</div>
-    <div class="lock-sub" id="lock-sub">内部台账 · 请勿外传</div>
-    <div class="lock-dots" id="lock-dots"></div>
-    <div class="lock-err" id="lock-err"></div>
-    <div class="keypad" id="keypad"></div>
-    <button class="lock-link" id="lock-reset" style="display:none;">忘记密码</button>
-  </div>
+  <div class="lock-inner" id="lock-inner"></div>
 </div>
 
 <!-- ==================== 主体 ==================== -->

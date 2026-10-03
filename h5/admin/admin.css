@@ -102,6 +102,8 @@ button { cursor:pointer; border:none; background:none; color:inherit; }
 .tile.alert .tile-num { color:#EF9F27; }
 .tile.good  .tile-num { color:#5DCAA5; }
 .tile.zero .tile-num { color:#4a4a46; }
+/* 看板是 2 列；末尾那块若落在奇数位（例如加了「待查地址」），让它独占一行，不留半格空洞 */
+.board .tile:last-child:nth-child(odd) { grid-column: span 2; }
 
 /* ==================== 卡片 ==================== */
 .card {

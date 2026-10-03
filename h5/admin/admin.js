@@ -568,7 +568,9 @@ function copySelfCheck(){
 // 拿台账里**真实存在的尾号**去文本里找。认出来的必然是对的，零误判。
 
 let reconHits = []          // 本次识别出的尾号
-let reconSel  = new Set()   // 勾选了哪几个
+let reconSel  = new Set()   // 勾选了哪几个（台账里已有的）
+let reconNew  = []          // 文本里有完整下单信息、但台账里还没有的单
+let reconNewSel = new Set() // 勾选了哪几个（待建的）
 
 function scanTails(text){
   const src = String(text || '')
@@ -594,11 +596,11 @@ function scanTails(text){
 }
 
 function openReconPaste(){
-  reconHits = []; reconSel = new Set()
+  reconHits = []; reconSel = new Set(); reconNew = []; reconNewSel = new Set()
   openSheet(`
     <div class="sh-title">粘贴对账</div>
     <div class="sh-sub">把客户发来的消息、或微信账单里那段文字，整段粘进来。<br>
-      我把里面的订单号挑出来，一次给你确认。</div>
+      台账里有的直接认款；<b>台账里没有但信息齐全的，我直接给你建单</b>。</div>
     <textarea class="sh-textarea" id="recon-paste" placeholder="【艺人代寄 · 下单信息】&#10;订单号：AL20261003A7K2&#10;艺人：Johnny Depp&#10;…"></textarea>
     <div class="sh-gap"></div>
     <button class="btn-full" onclick="runPasteRecon()">开始识别</button>
@@ -615,22 +617,38 @@ function runPasteRecon(){
   const text = ((ta && ta.value) || '').trim()
   if(!text){ toast('先把内容粘进来'); return }
 
-  reconHits = scanTails(text)
-  reconSel  = new Set()
+  reconHits   = scanTails(text)
+  reconSel    = new Set()
+  reconNew    = []
+  reconNewSel = new Set()
 
-  if(!reconHits.length){
+  // 关键一步：客户整段发来的信息，本身就是一张完整的单。
+  // 台账里没有 = 这单是他在**自己手机上**下的，我这边从来没收到过 ——
+  // 以前这里只会显示「这个尾号不在台账里」，然后就没有下文了，单就丢在这。
+  const list = allOrders()
+  splitOrderBlocks(text).forEach(block => {
+    const p = parseOrderText(block)
+    if(!p.order_no || !p.artist) return                       // 缺订单号或艺人，建不出单
+    if(list.some(o => o.order_no === p.order_no)) return      // 已在台账
+    const t = tail(p.order_no)
+    if(list.some(o => tail(o.order_no) === t)) return         // 尾号撞了，当作已有，不重复建
+    if(reconNew.some(x => tail(x.order_no) === t)) return
+    reconNew.push(p)
+  })
+  reconNew.forEach(p => reconNewSel.add(tail(p.order_no)))    // 默认全部勾上
+
+  if(!reconHits.length && !reconNew.length){
     const n = allOrders().length
     out.innerHTML =
       '<div class="hint" style="color:#EF9F27; line-height:1.8; margin-top:16px">'
       + '这段文字里没认出订单号。<br>'
       + '① 客户发来的信息里带订单号吗？没有的话，让他点他页面上的「复制下单信息」再发一次。<br>'
-      + '② 这一单录进台账了吗？没录过的话，先用上面的「新建订单」粘进来。<br>'
+      + '② 这一单录进台账了吗？没录过的话，把客户发来的整段粘进来就行 —— 带「订单号：」的那种。<br>'
       + '台账目前共 <b>' + n + '</b> 单。</div>'
     return
   }
 
   // 默认勾选「还没收款」的，已收款的不重复勾
-  const list = allOrders()
   reconHits.forEach(t => {
     const o = list.find(x => tail(x.order_no) === t)
     if(o && o.pay_status !== 'paid') reconSel.add(t)
@@ -642,13 +660,10 @@ function paintRecon(){
   const list = allOrders()
   const out  = document.getElementById('recon-out')
 
-  const rows = reconHits.map(t => {
+  // ① 台账里已有的：认出多少算多少
+  const known = reconHits.filter(t => list.some(o => tail(o.order_no) === t))
+  const rows = known.map(t => {
     const o = list.find(x => tail(x.order_no) === t)
-    if(!o){
-      return '<div class="rc-row off"><div class="rc-box">?</div>'
-        + '<div class="rc-body"><div class="rc-no">' + esc(t) + '</div>'
-        + '<div class="rc-meta">这个尾号不在台账里</div></div></div>'
-    }
     const paid = o.pay_status === 'paid'
     const on   = !paid && reconSel.has(t)
     return '<div class="rc-row ' + (paid ? 'off' : '') + '"'
@@ -661,12 +676,33 @@ function paintRecon(){
       + '</div></div>'
   }).join('')
 
-  const n = reconSel.size
+  // ② 台账里没有、但客户把整段发来了 —— 可以直接建单
+  const freshRows = reconNew.map(p => {
+    const t  = tail(p.order_no)
+    const on = reconNewSel.has(t)
+    return '<div class="rc-row rc-new ' + (on ? '' : 'off') + '" onclick="toggleReconNew(\'' + t + '\')">'
+      + '<div class="rc-box ' + (on ? 'on' : '') + '">' + (on ? '✓' : '') + '</div>'
+      + '<div class="rc-body">'
+      + '<div class="rc-no">' + esc(t) + ' <small>' + esc(p.artist) + '</small></div>'
+      + '<div class="rc-meta">' + esc(p.country || '未填国家')
+      + (p.customer_name ? ' · ' + esc(p.customer_name) : '')
+      + ' · <span style="color:#EF9F27">台账里还没有，会新建</span></div>'
+      + '</div></div>'
+  }).join('')
+
+  const nOld = reconSel.size, nNew = reconNewSel.size, n = nOld + nNew
   out.innerHTML =
-    '<div class="rc-head">认出 ' + reconHits.length + ' 个订单号</div>'
-    + '<div class="rc-list">' + rows + '</div>'
+    '<div class="rc-head">认出 ' + reconHits.length + ' 个订单号'
+    + (reconNew.length ? ' · 其中 ' + reconNew.length + ' 单台账里还没有' : '') + '</div>'
+    + (known.length ? '<div class="rc-list">' + rows + '</div>'
+        : '<div class="hint">认出来的订单号都在台账里了</div>')
+    + (reconNew.length
+        ? '<div class="rc-head" style="margin-top:14px">可以建单（信息齐全）</div>'
+          + '<div class="rc-list">' + freshRows + '</div>'
+        : '')
     + (n
         ? '<button class="btn-full" onclick="confirmRecon()">✓ 确认这 ' + n + ' 笔收款 · ¥' + n * PRICE + '</button>'
+          + (nNew ? '<div class="hint">其中 <b>' + nNew + ' 单</b>会先建单、再标记已收款</div>' : '')
         : '<div class="hint" style="color:#5DCAA5">认出来的单都已经确认过收款了</div>')
 }
 
@@ -675,9 +711,15 @@ function toggleRecon(t){
   paintRecon()
 }
 
+function toggleReconNew(t){
+  if(reconNewSel.has(t)) reconNewSel.delete(t); else reconNewSel.add(t)
+  paintRecon()
+}
+
 function confirmRecon(){
-  const list = allOrders()
-  let n = 0
+  const list = allOrders()          // 只用于查单，不用于写回（见下面的 fresh）
+  let n = 0, made = 0
+  // ① 台账里已有的 → 只改收款状态
   reconSel.forEach(t => {
     const o = list.find(x => tail(x.order_no) === t)
     if(!o || o.pay_status === 'paid') return
@@ -685,8 +727,20 @@ function confirmRecon(){
     log(o.id, '确认收款 ¥' + PRICE + '（粘贴对账）')
     n++
   })
+  // ② 台账里没有的 → 用客户发来的整段建单。
+  // 勾在这里意味着钱已经到账（他是在核对收款时才粘的），所以直接落成已收款。
+  const fresh = reconNew.filter(p => reconNewSel.has(tail(p.order_no)))
+  if(fresh.length){
+    // 必须**重新读一次**：上面 updOrder/log 每次都自己重写整个数组，
+    // 拿最开始那份 list 写回去，会把刚标记的收款状态全部抹掉。
+    const cur = allOrders()
+    fresh.forEach(p => cur.push(orderFromParsed(p, { paid:true, why:'从客户发来的信息建单 · 粘贴对账' })))
+    saveOrders(cur)
+    made = fresh.length; n += fresh.length
+  }
   closeSheet()
-  toast('已确认 ' + n + ' 笔 · ¥' + n * PRICE)
+  toast(made ? ('新建 ' + made + ' 单 · 确认 ' + n + ' 笔 · ¥' + n * PRICE)
+             : ('已确认 ' + n + ' 笔 · ¥' + n * PRICE))
   renderList()
 }
 
@@ -694,6 +748,7 @@ function confirmRecon(){
 const FIELD_MAP = {
   订单号:'order_no', 艺人:'artist', 收信国家:'country', 收信地址:'recipient_addr',
   我的称呼:'customer_name', 手机号:'customer_phone', 回信地址:'return_addr', 备注:'letter_note',
+  下单时间:'placed_at',
 }
 
 // 占位符不是内容：'-'、'（未填）'、'（客户未填…）' 都要还原成空字符串，
@@ -716,7 +771,56 @@ function parseOrderText(text){
     // 注意：「不需要」里含「需要」，必须先排掉否定式，否则非代查单会被误判成代查单
     if(key === '地址代查') o.addr_lookup = val.indexOf('不需要') < 0 && val.indexOf('需要') >= 0
   })
+  // 把「下单时间」还原成时间戳。还原不出来就留空，交给 orderFromParsed 兜到当前时间。
+  if(o.placed_at){
+    const m = /(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/.exec(o.placed_at)
+    if(m) o.created_at = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]).getTime()
+    delete o.placed_at
+  }
   return o
+}
+
+// 一段文字里可能有好几单（客户连着发、或者一次转发多条）。
+// 按块切开，才能一单一条地判断「在不在台账里」。
+function splitOrderBlocks(text){
+  const src = String(text || '').replace(/\r/g, '')
+  const HEAD = '【艺人代寄 · 下单信息】'
+  if(src.indexOf(HEAD) >= 0){
+    return src.split(HEAD).slice(1)                       // 第一段是块头之前的废话
+      .map(p => HEAD + p)
+      .filter(p => /订单号\s*[:：]/.test(p))
+  }
+  return /订单号\s*[:：]/.test(src) ? [src] : []
+}
+
+// 订单对象的唯一构造点。
+// 建单路径现在有两条（手填、从粘贴文本建单），字段列表写两份迟早漏字段 ——
+// 而且漏的往往是「地址待查」这种不显眼的开关。
+function orderFromParsed(p, opts){
+  opts = opts || {}
+  const paid = !!opts.paid
+  // 客户设备的钟可能不准：超前的、或者久到不合理的，一律不信，用当前时间。
+  const now = Date.now()
+  const ts = (p.created_at && p.created_at <= now + 60000 && p.created_at > now - 90*86400000)
+    ? p.created_at : now
+  return {
+    id: `${now}-${Math.floor(Math.random()*1e6)}`,
+    order_no: p.order_no || makeOrderNo(),
+    artist: p.artist || '',
+    country: p.country || '',
+    recipient_addr: p.recipient_addr || '',
+    addr_lookup: !!p.addr_lookup,
+    customer_name: p.customer_name || '',
+    customer_phone: p.customer_phone || '',
+    return_addr: p.return_addr || '',
+    letter_source: p.letter_source === 'proxy' ? 'proxy' : 'self',
+    letter_note: p.letter_note || '',
+    status: paid ? 'paid' : 'created',
+    pay_status: paid ? 'paid' : 'unpaid',
+    admin_note: '', media: [],
+    logs: [{ at: now, text: opts.why || '手工建单' }],
+    created_at: ts,
+  }
 }
 
 function makeOrderNo(){
@@ -802,8 +906,7 @@ function renderOrderForm(data){
 function saveNewOrder(){
   const artist = (document.getElementById('n-artist').value || '').trim()
   if(!artist){ toast('艺人姓名必填'); return }
-  const order = {
-    id: `${Date.now()}-${Math.floor(Math.random()*1e6)}`,
+  const order = orderFromParsed({
     order_no: (document.getElementById('n-order').value || '').trim() || makeOrderNo(),
     artist,
     country: document.getElementById('n-country').value.trim(),
@@ -814,11 +917,9 @@ function saveNewOrder(){
     return_addr: document.getElementById('n-return').value.trim(),
     letter_source: document.getElementById('n-src').value,
     letter_note: document.getElementById('n-note').value.trim(),
-    status: 'created', pay_status: 'unpaid',
-    admin_note: '', media: [],
-    logs: [{ at: Date.now(), text: '手工建单' }],
-    created_at: Date.now(),
-  }
+    // 客户发来的整段里带「下单时间」时，用真实下单时间，而不是我补录的时间
+    created_at: draft.created_at,
+  }, { paid:false, why:'手工建单' })
   const list = allOrders(); list.push(order); saveOrders(list)
   closeSheet()
   filterKey = 'all'

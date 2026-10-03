@@ -477,8 +477,8 @@ function renderDetail(id){
     </div>
     <!-- 随单附赠的指南，随时能回来读 -->
     <div class="card gift-mini" onclick="openGuide()">
-      <div class="gift-mini-title">🎁 写给明星的信 · 完整指南</div>
-      <div class="gift-mini-desc">写什么、写多长、什么时候寄 —— 10 节讲透</div>
+      <div class="gift-mini-title">🎁 写给明星的信</div>
+      <div class="gift-mini-desc">为什么值得写 · 加 10 节实操（写什么 / 写多长 / 何时寄）</div>
     </div>
 
     ${imgs.length?`

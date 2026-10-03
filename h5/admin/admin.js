@@ -870,7 +870,7 @@ function match(o, kw){
 }
 
 function renderList(){
-  renderBoard(); renderChips(); renderLocalStrip()
+  renderBoard(); renderChips(); renderLocalStrip(); renderBackupNudge()
   const kw = (document.getElementById('kw').value || '').trim().toUpperCase()
 
   let list = allOrders().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))
@@ -1127,6 +1127,29 @@ function copyUnpaid(){
 }
 
 // ==================== 备份 ====================
+// 台账只住在浏览器里，清缓存 / 换手机就没了 —— 而云端还没有。
+// 底部那行「换手机请先导出备份」是静态小字，没人会读第二遍，
+// 所以改成主动提醒：久没导出就把这事顶到眼前，导完自动消失。
+const EXPORT_KEY = 'artist_letter_admin_last_export'
+const BACKUP_MAX_DAYS = 7
+
+function renderBackupNudge(){
+  const box = document.getElementById('backup-nudge')
+  if(!box) return
+  if(!allOrders().length){ box.innerHTML = ''; return }   // 台账空的，没什么可丢
+  let last = 0
+  try { last = Number(localStorage.getItem(EXPORT_KEY)) || 0 } catch(e){}
+  const days = last ? Math.floor((Date.now() - last) / 86400000) : -1
+  if(last && days < BACKUP_MAX_DAYS){ box.innerHTML = ''; return }
+  const what = last ? `已经 <b>${days} 天</b>没导出备份了` : `还没有导出过备份`
+  box.innerHTML = `
+    <div class="bk-nudge">
+      <div class="bk-nudge-t">⚠️ ${what}</div>
+      <div class="bk-nudge-d">台账只存在这台设备的浏览器里 —— <b>清缓存或换手机就没了</b>。现在导出一次。</div>
+      <button class="bk-nudge-btn" onclick="doExport()">📤 导出备份</button>
+    </div>`
+}
+
 function doExport(){
   const list = allOrders()
   if(!list.length){ toast('台账还是空的'); return }
@@ -1140,6 +1163,8 @@ function doExport(){
     a.download = `台账备份_${fmtDay(Date.now())}.json`
     document.body.appendChild(a); a.click()
     setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a) }, 1500)
+    try { localStorage.setItem(EXPORT_KEY, String(Date.now())) } catch(e){}
+    renderBackupNudge()          // 导完就把提醒收掉
     toast('已导出 ' + list.length + ' 单')
   } catch(e){
     copy(json); toast('已复制备份内容到剪贴板')

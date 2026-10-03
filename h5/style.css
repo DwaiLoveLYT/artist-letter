@@ -86,6 +86,13 @@ body {
   font-size:15px; color:#8a8a82; margin-bottom:24px; line-height:1.5;
 }
 .hero-cta { display:flex; flex-direction:column; gap:10px; }
+/* 主视觉实拍图：默认 display:none —— 没图时不留空框，也不会闪一下白块。
+   有图时由 initHero() 打开。图要够大，它才是这一屏的视线锚点。 */
+.hero-figure { display:none; margin:0 auto 22px; max-width:360px; }
+.hero-figure-img {
+  width:100%; display:block; border-radius:16px; cursor:pointer;
+  box-shadow:0 14px 36px rgba(0,0,0,0.5);
+}
 
 /* ==================== 按钮 ==================== */
 .btn {

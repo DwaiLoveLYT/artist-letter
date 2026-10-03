@@ -283,6 +283,10 @@ select.input {
   transition:all .14s ease;
 }
 .rc-box.on { background:#5DCAA5; border-color:#5DCAA5; }
+/* 已收款的单：绿框绿勾，和「已勾选」区分开，且不可点 */
+.rc-box.done {
+  background:rgba(93,202,165,.14); border-color:rgba(93,202,165,.42); color:#5DCAA5;
+}
 .rc-body { flex:1; min-width:0; }
 .rc-no {
   font-size:15.5px; font-weight:700; letter-spacing:1.2px;

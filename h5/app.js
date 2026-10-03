@@ -277,6 +277,7 @@ function submitOrder(){
   lastOrderId=order.id
   const savedOK=lastSaveOK
   saveProfile(order)                 // 下次下单自动带出称呼 / 手机 / 回信地址
+  syncOrderToCloud(order)            // 同时送一份到服务端（见下方说明）
 
   document.getElementById('s-order-no').innerText='订单号 '+orderNo
   document.getElementById('s-pay').innerHTML=payGuideHtml(order)
@@ -324,6 +325,32 @@ function orderInfoText(o){
 function stampText(ts){
   const d = new Date(ts || Date.now()), p = n => String(n).padStart(2,'0')
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// 把订单同时送到服务端 —— 这样换任何设备、清缓存，我这边都看得到。
+//
+// 只有服务端**明确回了成功**，才告诉客户「不用再发一遍」。
+// 服务端是先落盘再回话的，所以 ok:true 就是真的收到了。
+// 没收到（服务没开 / 网络不通 / 报错）就什么都不改 —— 上面那句琥珀色警告原样留着，
+// 客户照旧会发我一次。宁可多发一遍，也不能出现「客户以为我收到了、其实没有」。
+function syncOrderToCloud(order){
+  if(!window.Cloud || !Cloud.on()) return
+  Cloud.pushOrder(order).then(r => {
+    if(!(r && r.ok)) return
+    updOrder(order.id, { cloud_at: Date.now() })
+
+    const st = document.getElementById('cloud-state')
+    if(st){
+      st.innerHTML = '<div class="cloud-ok">✓ 已经直接送到我这边了 —— 这一单不用再发一遍</div>'
+    }
+    const tip = document.getElementById('save-tip')
+    if(tip){
+      // 警告降级成提示：它警告的那件事（我看不到）已经不成立了。
+      tip.className = 'save-tip'
+      tip.innerHTML = '订单号已经记在你这台设备上，也同步给我了。<br>'
+        + '想留个底就截个图 —— 换手机、清缓存后本地这份会没，但我这边有。'
+    }
+  })
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }
 // 截图要翻相册、还会被清；复制一下才是真能用的保存方式
@@ -385,6 +412,7 @@ function payGuideHtml(o){
         </div>
         <button class="btn btn-large" onclick="shareOrderInfo()">发给客服（一键分享）</button>
         <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>
+        <div id="cloud-state"></div>
       </div>
     </div>`
 }

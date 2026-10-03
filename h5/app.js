@@ -137,12 +137,34 @@ function initHome(){
 
 // ==================== 下单 ====================
 let letterSource='self'
+let addrLookup=false          // 客户勾了「帮我查最新地址」
+
+const RECIPIENT_PH_NORMAL = '艺人工作室 / 经纪公司 / Fan mail 地址\n不知道精确地址就填城市或国家，我负责帮你查最新的'
+const RECIPIENT_PH_LOOKUP = '可以只写城市，或者干脆留空 —— 我会去查这位艺人最新的收信地址'
+
 function setLetterSource(el){
   letterSource=el.dataset.value
   document.querySelectorAll('#page-order .radio').forEach(r=>r.classList.remove('on'))
   el.classList.add('on')
   document.getElementById('proxy-note-box').style.display=letterSource==='proxy'?'block':'none'
   document.getElementById('self-note-box').style.display=letterSource==='self'?'block':'none'
+}
+
+function toggleAddrLookup(){
+  addrLookup=!addrLookup
+  const box=document.getElementById('lookup-toggle')
+  const sw =document.getElementById('lookup-switch')
+  const req=document.getElementById('recipient-req')
+  const ta =document.getElementById('o-recipient')
+  const hint=document.getElementById('recipient-hint')
+
+  box.classList.toggle('on',addrLookup)
+  sw.innerText=addrLookup?'✓':''
+  req.style.display=addrLookup?'none':''
+  ta.placeholder=addrLookup?RECIPIENT_PH_LOOKUP:RECIPIENT_PH_NORMAL
+  hint.innerText=addrLookup
+    ? '已记下：这一单的地址由我帮你查，查到后会更新在「我的订单」'
+    : '不知道精确地址就填城市或国家，我负责帮你查最新的'
 }
 
 function submitOrder(){
@@ -157,7 +179,7 @@ function submitOrder(){
 
   if(!artist){ toast('请填写艺人姓名'); return }
   if(!country){ toast('请填写收信国家'); return }
-  if(!recipient){ toast('请填写收信地址'); return }
+  if(!recipient && !addrLookup){ toast('请填写收信地址，或勾选「帮我查最新地址」'); return }
   if(!phone){ toast('请填写手机号'); return }
   if(!retAddr){ toast('请填写回信地址'); return }
   if(letterSource==='proxy' && !note){ toast('选择代写时，请填写想说的话'); return }
@@ -167,6 +189,7 @@ function submitOrder(){
     id:`${Date.now()}-${Math.floor(Math.random()*1e6)}`,
     order_no:orderNo, artist, country,
     recipient_addr:recipient,
+    addr_lookup:addrLookup,          // 客户把地址交给我查
     customer_name:document.getElementById('o-name').value.trim(),
     customer_phone:phone, return_addr:retAddr,
     letter_source:letterSource, letter_note:note,
@@ -189,6 +212,7 @@ function submitOrder(){
   document.getElementById('o-return').value=''
   document.getElementById('o-note-proxy').value=''
   document.getElementById('o-note-self').value=''
+  if(addrLookup) toggleAddrLookup()      // 复位地址代查开关
 
   initHome() // 更新顶部统计
   goPage('success')
@@ -201,7 +225,8 @@ function orderInfoText(o){
     `订单号：${o.order_no}`,
     `艺人：${o.artist}`,
     `收信国家：${o.country}`,
-    `收信地址：${o.recipient_addr}`,
+    `收信地址：${o.recipient_addr || '（客户未填，见下方「地址代查」）'}`,
+    `地址代查：${o.addr_lookup ? '需要（请帮我查这位艺人最新的收信地址）' : '不需要'}`,
     `我的称呼：${o.customer_name||'（未填）'}`,
     `手机号：${o.customer_phone}`,
     `回信地址：${o.return_addr}`,

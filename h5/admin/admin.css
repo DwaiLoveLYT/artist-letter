@@ -390,3 +390,19 @@ select.input {
 .imp-ok {
   margin-top:12px; font-size:12.5px; line-height:1.7; color:#7f9c8b;
 }
+
+/* 备份提醒：把「台账会丢」这件事顶到眼前，而不是写在页脚小字里。
+   导完自动消失，所以它出现本身就是行动信号。 */
+.bk-nudge {
+  margin:12px 0; padding:12px 13px; border-radius:10px;
+  background:rgba(239,159,39,.1); border:1px solid rgba(239,159,39,.3);
+}
+.bk-nudge-t { font-size:13px; font-weight:600; color:#EF9F27; margin-bottom:5px; }
+.bk-nudge-t b { color:#f0b455; }
+.bk-nudge-d { font-size:12.5px; line-height:1.7; color:#b09a78; margin-bottom:11px; }
+.bk-nudge-d b { color:#d8b98a; }
+.bk-nudge-btn {
+  width:100%; padding:11px 0; border-radius:9px; border:none;
+  background:rgba(239,159,39,.16); color:#EF9F27;
+  font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;
+}

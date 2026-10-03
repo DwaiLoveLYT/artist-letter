@@ -194,7 +194,12 @@ function doReconcile(){
 
   const hits = allOrders().filter(o => tail(o.order_no) === t)
   if(!hits.length){
-    out.innerHTML = '<div class="hint" style="color:#EF9F27">没找到这个尾号 · 客户可能还没把订单发给你</div>'
+    const n = allOrders().length
+    out.innerHTML =
+      '<div class="hint" style="color:#EF9F27; line-height:1.75">没找到这个尾号。<br>'
+      + '① 这一单录进台账了吗？客户在他自己手机上下单，<b>不会</b>自动进你台账——'
+      + '要把客户发来的下单信息，用上面的「新建订单」粘进来。<br>'
+      + '② 台账目前共 <b>' + n + '</b> 单。</div>'
     return
   }
   const o = hits[0]
@@ -210,6 +215,120 @@ function doReconcile(){
         ? '<div class="hint" style="color:#5DCAA5">这单已经标记过了</div>'
         : `<button class="btn-full" style="margin-top:10px" onclick="markPaid('${o.id}', true)">✓ 确认收到 ¥${PRICE}</button>`}
     </div>`
+}
+
+// ==================== 新建订单（粘贴客户信息） ====================
+const FIELD_MAP = {
+  订单号:'order_no', 艺人:'artist', 收信国家:'country', 收信地址:'recipient_addr',
+  我的称呼:'customer_name', 手机号:'customer_phone', 回信地址:'return_addr', 备注:'letter_note',
+}
+
+function parseOrderText(text){
+  const o = {}
+  String(text || '').split('\n').forEach(line => {
+    const m = /^\s*(.+?)\s*[:：]\s*(.*)\s*$/.exec(line)
+    if(!m) return
+    const key = m[1].replace(/^【|】$/g,'').trim()
+    const val = m[2].trim()
+    if(FIELD_MAP[key]) o[FIELD_MAP[key]] = val
+    if(key === '信的来源') o.letter_source = val.indexOf('代写') >= 0 ? 'proxy' : 'self'
+  })
+  return o
+}
+
+function makeOrderNo(){
+  const C = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let out = ''
+  for(let i = 0; i < 6; i++) out += C[Math.floor(Math.random()*C.length)]
+  const d = new Date(), p = n => String(n).padStart(2,'0')
+  return `AL${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${out}`
+}
+
+let draft = {}
+
+function openNewOrder(){
+  draft = { order_no: makeOrderNo(), letter_source: 'self' }
+  openSheet(`
+    <div class="sh-title">新建订单</div>
+    <div class="sh-sub">让客户点一下他页面上的「复制下单信息」，把整段发给你，粘到这里自动识别</div>
+    <textarea class="sh-textarea" id="paste-box" placeholder="【艺人代寄 · 下单信息】&#10;订单号：AL20261003ABCD&#10;艺人：Johnny Depp&#10;收信国家：United States&#10;收信地址：...&#10;手机号：...&#10;回信地址：..."></textarea>
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="parsePaste()">识别并继续</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="renderOrderForm({})">跳过粘贴 · 直接手填</button>
+  `)
+}
+
+function parsePaste(){
+  const text = (document.getElementById('paste-box').value || '').trim()
+  if(!text){ toast('先粘贴客户发来的信息'); return }
+  const parsed = parseOrderText(text)
+  if(!parsed.artist && !parsed.recipient_addr && !parsed.phone){
+    toast('没识别出内容，改用「直接手填」')
+  }
+  renderOrderForm(parsed)
+}
+
+function renderOrderForm(data){
+  draft = Object.assign({ order_no: draft.order_no || makeOrderNo(), letter_source: 'self' }, data)
+  const row = (id, label, val, ph) =>
+    `<div class="mini-field"><div class="mini-label">${label}</div>
+       <input class="input" id="${id}" value="${esc(val || '')}" placeholder="${ph || ''}"></div>`
+
+  openSheet(`
+    <div class="sh-title">确认订单信息</div>
+    <div class="sh-sub">核对一下，缺的可以补。带 * 的必填。</div>
+    ${row('n-order','订单号', draft.order_no)}
+    ${row('n-artist','艺人 *', draft.artist, '例如 Johnny Depp')}
+    ${row('n-country','收信国家', draft.country, '例如 United States')}
+    <div class="mini-field"><div class="mini-label">收信地址</div>
+      <textarea class="sh-textarea" id="n-recipient" style="min-height:76px" placeholder="艺人工作室 / Fan mail 地址">${esc(draft.recipient_addr || '')}</textarea></div>
+    ${row('n-name','客户称呼', draft.customer_name)}
+    ${row('n-phone','客户手机 / 微信', draft.customer_phone)}
+    <div class="mini-field"><div class="mini-label">回信地址</div>
+      <textarea class="sh-textarea" id="n-return" style="min-height:76px" placeholder="客户的中文回信地址">${esc(draft.return_addr || '')}</textarea></div>
+    <div class="mini-field"><div class="mini-label">信件来源</div>
+      <select class="input" id="n-src">
+        <option value="self">客户自己手写</option>
+        <option value="proxy">需要代写（费用另议）</option>
+      </select></div>
+    <div class="mini-field"><div class="mini-label">客户备注</div>
+      <textarea class="sh-textarea" id="n-note" style="min-height:66px" placeholder="想要的元素、配色、想避开的">${esc(draft.letter_note || '')}</textarea></div>
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="saveNewOrder()">存入台账</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">取消</button>
+  `)
+  setTimeout(() => {
+    const sel = document.getElementById('n-src')
+    if(sel) sel.value = draft.letter_source || 'self'
+  }, 40)
+}
+
+function saveNewOrder(){
+  const artist = (document.getElementById('n-artist').value || '').trim()
+  if(!artist){ toast('艺人姓名必填'); return }
+  const order = {
+    id: `${Date.now()}-${Math.floor(Math.random()*1e6)}`,
+    order_no: (document.getElementById('n-order').value || '').trim() || makeOrderNo(),
+    artist,
+    country: document.getElementById('n-country').value.trim(),
+    recipient_addr: document.getElementById('n-recipient').value.trim(),
+    customer_name: document.getElementById('n-name').value.trim(),
+    customer_phone: document.getElementById('n-phone').value.trim(),
+    return_addr: document.getElementById('n-return').value.trim(),
+    letter_source: document.getElementById('n-src').value,
+    letter_note: document.getElementById('n-note').value.trim(),
+    status: 'created', pay_status: 'unpaid',
+    admin_note: '', media: [],
+    logs: [{ at: Date.now(), text: '手工建单' }],
+    created_at: Date.now(),
+  }
+  const list = allOrders(); list.push(order); saveOrders(list)
+  closeSheet()
+  filterKey = 'all'
+  renderList()
+  toast('已存入台账 · 尾号 ' + tail(order.order_no))
 }
 
 // ==================== 筛选 / 列表 ====================
@@ -268,7 +387,7 @@ function renderList(){
     box.innerHTML = ''
     empty.style.display = allOrders().length ? 'block' : 'block'
     empty.querySelector('.empty-title').innerText = allOrders().length ? '没有匹配的订单' : '台账还是空的'
-    empty.querySelector('.empty-sub').innerText   = allOrders().length ? '换个筛选条件，或清空搜索词' : '客户下单后，这里会出现订单'
+    empty.querySelector('.empty-sub').innerText   = allOrders().length ? '换个筛选条件，或清空搜索词' : '客户发来下单信息后，点上面的「新建订单」粘进来'
     return
   }
   empty.style.display = 'none'

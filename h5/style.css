@@ -500,6 +500,193 @@ body {
 .lookup-toggle.on .switch-title { color:#5DCAA5; }
 .switch-desc { font-size:12px; color:#6a6a62; line-height:1.55; }
 
+/* ==================== 送礼：指南入口卡 ==================== */
+.gift-card {
+  background:linear-gradient(135deg, #23301f 0%, #1a1a19 65%);
+  border:1px solid rgba(93,202,165,0.26);
+  border-radius:16px; padding:18px; margin-bottom:12px;
+  cursor:pointer; position:relative; overflow:hidden;
+  transition:border-color .16s ease;
+}
+.gift-card:active { border-color:rgba(93,202,165,0.5); }
+.gift-card::after {
+  content:''; position:absolute; top:-40px; right:-30px;
+  width:120px; height:120px; border-radius:50%;
+  background:radial-gradient(circle, rgba(93,202,165,0.16) 0%, transparent 70%);
+  pointer-events:none;
+}
+.gift-badge {
+  display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.6px;
+  color:#0d0d0c; background:#5DCAA5;
+  padding:3px 9px; border-radius:999px; margin-bottom:11px;
+}
+.gift-title { font-size:17px; font-weight:600; color:#f5f5f0; margin-bottom:7px; letter-spacing:-.2px; }
+.gift-desc  { font-size:12.5px; color:#8a9a8f; line-height:1.65; margin-bottom:13px; }
+.gift-cta   { font-size:13.5px; font-weight:600; color:#5DCAA5; }
+
+/* 订单详情页里的迷你入口 */
+.gift-mini {
+  background:linear-gradient(135deg, rgba(44,74,59,0.4) 0%, #1a1a19 70%);
+  border-color:rgba(93,202,165,0.2);
+  cursor:pointer; transition:border-color .16s ease;
+}
+.gift-mini:active { border-color:rgba(93,202,165,0.45); }
+.gift-mini-title { font-size:14.5px; font-weight:600; color:#f5f5f0; margin-bottom:5px; }
+.gift-mini-desc  { font-size:12.5px; color:#8a9a8f; line-height:1.6; }
+
+/* ==================== 送礼弹层 ==================== */
+.gift-mask {
+  position:fixed; inset:0; z-index:220;
+  background:rgba(0,0,0,0.72);
+  -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+  display:none; align-items:center; justify-content:center; padding:24px;
+}
+.gift-mask.on { display:flex; animation:giftMaskIn .22s ease; }
+@keyframes giftMaskIn { from{opacity:0} to{opacity:1} }
+.gift-pop {
+  width:100%; max-width:340px;
+  background:linear-gradient(160deg, #22301f 0%, #1a1a19 70%);
+  border:1px solid rgba(93,202,165,0.3);
+  border-radius:20px; padding:26px 22px 22px;
+  text-align:center;
+  animation:giftPopIn .3s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes giftPopIn { from{opacity:0; transform:scale(.92) translateY(10px)} to{opacity:1; transform:scale(1) translateY(0)} }
+.gift-pop-emoji { font-size:40px; line-height:1; margin-bottom:12px; }
+.gift-pop-title { font-size:20px; font-weight:600; color:#f5f5f0; margin-bottom:10px; letter-spacing:-.3px; }
+.gift-pop-desc  { font-size:13.5px; color:#9aa89f; line-height:1.75; margin-bottom:20px; }
+.gift-pop .btn, .gift-pop .btn-ghost { margin-bottom:9px; }
+.gift-pop-foot  { font-size:11.5px; color:#5a5a54; margin-top:6px; line-height:1.5; }
+
+/* ==================== 写信指南 ==================== */
+.guide-cover {
+  text-align:center; padding:30px 18px 28px; margin-bottom:22px;
+  background:linear-gradient(180deg, rgba(44,74,59,0.22) 0%, transparent 100%);
+  border-radius:16px; border:1px solid rgba(93,202,165,0.13);
+}
+.guide-cover-badge {
+  display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:1.2px;
+  color:#5DCAA5; background:rgba(93,202,165,0.1);
+  border:1px solid rgba(93,202,165,0.22);
+  padding:4px 11px; border-radius:999px; margin-bottom:18px;
+}
+.guide-cover-title {
+  font-size:28px; font-weight:600; color:#f5f5f0;
+  letter-spacing:1px; line-height:1.3; margin-bottom:8px;
+}
+.guide-cover-sub {
+  font-size:12px; font-weight:600; color:#8a9a8f;
+  letter-spacing:5px; text-indent:5px; margin-bottom:20px;
+}
+.guide-cover-note {
+  font-size:13.5px; color:#a5a49f; line-height:1.7;
+  max-width:270px; margin:0 auto 16px;
+  padding-top:16px; border-top:1px solid rgba(255,255,255,0.07);
+}
+.guide-cover-meta { font-size:11.5px; color:#5a5a54; letter-spacing:.5px; }
+
+.guide-section { margin-bottom:30px; }
+.guide-h {
+  display:flex; align-items:baseline; gap:10px;
+  font-size:17px; font-weight:600; color:#f5f5f0;
+  line-height:1.45; margin-bottom:13px;
+}
+.guide-num {
+  flex-shrink:0; font-size:12px; font-weight:700; color:#5DCAA5;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing:.5px; padding-top:2px;
+}
+.guide-p { font-size:14px; color:#b0afa9; line-height:1.85; margin-bottom:11px; }
+.guide-p:last-child { margin-bottom:0; }
+.guide-p b, .guide-ul b { color:#e8e7e2; font-weight:600; }
+.guide-p-lead { font-size:15px; color:#c8c7c2; }
+
+.guide-ul { list-style:none; margin:0 0 11px; padding:0; }
+.guide-ul li {
+  position:relative; font-size:14px; color:#b0afa9; line-height:1.8;
+  padding-left:18px; margin-bottom:9px;
+}
+.guide-ul li:last-child { margin-bottom:0; }
+.guide-ul li::before {
+  content:''; position:absolute; left:2px; top:11px;
+  width:5px; height:5px; border-radius:50%; background:#5DCAA5; opacity:.65;
+}
+.guide-ul-warn li::before { background:#EF9F27; }
+
+.guide-note {
+  background:rgba(93,202,165,0.06);
+  border-left:2px solid rgba(93,202,165,0.4);
+  border-radius:0 10px 10px 0;
+  padding:13px 15px; margin:14px 0;
+}
+.guide-note-label { font-size:11.5px; font-weight:600; color:#5DCAA5; margin-bottom:7px; letter-spacing:.3px; }
+.guide-note-body  { font-size:13.5px; color:#c8c7c2; line-height:1.8; }
+.guide-note-body b { color:#f5f5f0; }
+
+.guide-compare { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+.guide-compare-stack { grid-template-columns:1fr; }
+.guide-bad, .guide-good {
+  border-radius:11px; padding:13px 14px;
+  font-size:13px; line-height:1.7;
+}
+.guide-bad  { background:rgba(196,99,58,0.07);  border:1px solid rgba(196,99,58,0.22);  color:#b09a91; }
+.guide-good { background:rgba(93,202,165,0.07); border:1px solid rgba(93,202,165,0.24); color:#c3d3ca; }
+.guide-bad-label, .guide-good-label {
+  font-size:10.5px; font-weight:700; letter-spacing:.5px; margin-bottom:8px;
+}
+.guide-bad-label  { color:#C4633A; }
+.guide-good-label { color:#5DCAA5; }
+.guide-bad > div + div, .guide-good > div + div { margin-top:5px; }
+
+.guide-code {
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size:12.5px; color:#5DCAA5;
+  background:rgba(93,202,165,0.09);
+  padding:2px 7px; border-radius:5px;
+}
+
+.guide-sample {
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size:12.5px; line-height:1.95; color:#cfcec8;
+  background:rgba(255,255,255,0.032);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:12px; padding:18px 16px;
+  white-space:pre-wrap; word-break:break-word;
+  margin-bottom:14px;
+}
+
+.guide-annot { margin-bottom:14px; }
+.guide-annot-row {
+  display:flex; gap:12px; align-items:flex-start;
+  padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05);
+}
+.guide-annot-row:last-child { border-bottom:0; }
+.guide-annot-k {
+  flex-shrink:0; width:52px; font-size:11.5px; font-weight:600; color:#5DCAA5;
+  padding-top:2px;
+}
+.guide-annot-v { font-size:13px; color:#a5a49f; line-height:1.7; }
+.guide-annot-v b { color:#f5f5f0; }
+
+.guide-quote {
+  margin-top:20px; padding:22px 18px;
+  background:linear-gradient(160deg, rgba(44,74,59,0.2) 0%, transparent 100%);
+  border:1px solid rgba(93,202,165,0.15);
+  border-radius:14px;
+}
+.guide-quote-q { font-size:15px; font-weight:600; color:#5DCAA5; margin-bottom:14px; }
+.guide-quote-a { font-size:14px; color:#b8b7b1; line-height:2; }
+.guide-quote-a b { color:#f5f5f0; font-size:15px; }
+
+.guide-end { text-align:center; padding:28px 0 8px; }
+.guide-end-line {
+  width:36px; height:1px; background:rgba(93,202,165,0.35);
+  margin:0 auto 22px;
+}
+.guide-end-text {
+  font-size:13.5px; color:#8a9a8f; margin-bottom:20px; letter-spacing:.5px;
+}
+
 /* ==================== 空状态 ==================== */
 .empty-state { text-align:center; padding:48px 20px; }
 .empty-icon { font-size:40px; margin-bottom:12px; }

@@ -307,7 +307,7 @@ function paintRecon(){
     const on   = !paid && reconSel.has(t)
     return '<div class="rc-row ' + (paid ? 'off' : '') + '"'
       + (paid ? '' : ' onclick="toggleRecon(\'' + t + '\')"') + '>'
-      + '<div class="rc-box ' + (on || paid ? 'on' : '') + '">' + (on || paid ? '✓' : '') + '</div>'
+      + '<div class="rc-box ' + (paid ? 'done' : (on ? 'on' : '')) + '">' + (on || paid ? '✓' : '') + '</div>'
       + '<div class="rc-body">'
       + '<div class="rc-no">' + esc(t) + ' <small>' + esc(o.artist || '未填艺人') + '</small></div>'
       + '<div class="rc-meta">' + esc(o.customer_name || '未填称呼') + ' · ' + fmt(o.created_at) + ' 下单'

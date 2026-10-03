@@ -260,29 +260,12 @@
     <div class="success-title">订单已生成</div>
     <div class="success-sub" id="s-order-no"></div>
 
-    <div class="notice notice-highlight">
-      付款时请备注订单号后 4 位 <b id="s-tail" class="highlight"></b>，方便我对账
-    </div>
+    <!-- 付款引导卡（由 payGuideHtml 渲染） -->
+    <div id="s-pay"></div>
 
     <div class="save-tip">
       📸 建议截图保存这串订单号<br>
       订单存在你当前这台设备的浏览器里，换设备或清缓存后查不到，凭订单号加微信 <b>IMDWAY</b> 一样能查
-    </div>
-
-    <div class="card">
-      <div class="card-title">扫码付款</div>
-      <div class="pay-info">
-        <div class="pay-row"><span>金额</span><span class="pay-amount">¥190</span></div>
-        <div class="pay-row"><span>备注</span><span id="s-tail2" class="pay-amount"></span></div>
-      </div>
-      <div class="qr-wrap">
-        <img class="qr-img" id="s-qr" src="images/pay-qr.jpg" alt="收款码" onclick="previewImage(this.src)">
-        <div class="qr-tip">
-          长按识别二维码付款<br>
-          或保存图片 → 微信扫一扫 → 相册选图
-        </div>
-      </div>
-      <button class="btn-ghost" onclick="copyText(document.getElementById('s-tail').innerText)">复制备注数字</button>
     </div>
 
     <div class="card">

@@ -502,12 +502,13 @@ function escapeHtml(str){
 
 // 校验失败时把出错那一栏直接标出来并滚过去。
 // 只弹一句 toast 的话，长表单里客户根本不知道是哪一项没填。
+// 注意用 block:'start' 而不是 'center' —— toast 就浮在屏幕正中，滚到中间会被它盖住。
 function fieldError(id, msg){
   toast(msg)
   const el=document.getElementById(id)
   if(!el) return
   el.classList.add('field-error')
-  el.scrollIntoView({behavior:'smooth', block:'center'})
+  el.scrollIntoView({behavior:'smooth', block:'start'})
   setTimeout(()=>el.classList.remove('field-error'), 2400)
 }
 

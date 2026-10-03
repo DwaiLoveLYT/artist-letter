@@ -27,19 +27,225 @@ function allOrders(){
   try { const list = JSON.parse(localStorage.getItem(STORE_KEY)); return Array.isArray(list) ? list : [] }
   catch(e){ return [] }
 }
-function saveOrders(list){ localStorage.setItem(STORE_KEY, JSON.stringify(list)) }
+// 所有写盘都走这里 —— 顺带触发云端同步，不用在每个改动点都记着调一次
+function saveOrders(list){
+  localStorage.setItem(STORE_KEY, JSON.stringify(list))
+  cloudTouch()
+}
 function getOrder(id){ return allOrders().find(o => o.id === id) || null }
 function updOrder(id, patch){
   const list = allOrders(); const i = list.findIndex(o => o.id === id)
   if(i < 0) return null
-  list[i] = Object.assign({}, list[i], patch); saveOrders(list); return list[i]
+  // 每次都盖 updated_at：跨设备合并时靠它判断「哪一份更新」，
+  // 不盖的话两台设备的改动会互相顶回旧状态。
+  list[i] = Object.assign({}, list[i], patch, { updated_at: Date.now() })
+  saveOrders(list); return list[i]
 }
-function delOrder(id){ saveOrders(allOrders().filter(o => o.id !== id)) }
+function delOrder(id){
+  const o = getOrder(id)
+  if(o) markDeleted(o.order_no)      // 留墓碑：否则下次合并会把这条从云端又拉回来
+  saveOrders(allOrders().filter(o => o.id !== id))
+}
 function log(id, text){
   const o = getOrder(id); if(!o) return
   const logs = Array.isArray(o.logs) ? o.logs : []
   logs.push({ at: Date.now(), text })
   updOrder(id, { logs })
+}
+
+// ==================== 云端同步 ====================
+// 台账原先只住在浏览器里 —— 所以「客户在自己手机上下的单，我这边看不到」
+// 不是 bug，是 localStorage 按「设备 + 浏览器 + 域名」隔离，换台设备就是另一个空存储。
+// 这一段把台账接到自建后端上：客户页直传的单会自动进来，我这边的改动也会回推。
+//
+// 设计原则：**服务端不可用时，后台必须完全照旧能用**（退回纯本地）。
+// 任何一次网络失败都不能让页面卡住、报错、或丢数据。
+
+const CLOUD_KEY_STORE = 'artist_letter_cloud_key'
+const CLOUD_DEL_STORE = 'artist_letter_cloud_deleted'
+
+let cloudKey   = ''
+let cloudBusy  = false
+let cloudAt    = 0            // 上次成功同步的时间
+let cloudErr   = ''
+let cloudMute  = false        // 正在把远端合并回本地时，别再触发推送（否则自己推自己）
+let cloudTimer = null
+
+function cloudLoad(){
+  try { cloudKey = localStorage.getItem(CLOUD_KEY_STORE) || '' } catch(e){ cloudKey = '' }
+}
+function cloudSaveKey(k){
+  cloudKey = String(k || '').trim()
+  try {
+    if(cloudKey) localStorage.setItem(CLOUD_KEY_STORE, cloudKey)
+    else localStorage.removeItem(CLOUD_KEY_STORE)
+  } catch(e){}
+}
+function pendingDeleted(){
+  try { const a = JSON.parse(localStorage.getItem(CLOUD_DEL_STORE)); return Array.isArray(a) ? a : [] }
+  catch(e){ return [] }
+}
+function markDeleted(no){
+  if(!no) return
+  const a = pendingDeleted()
+  if(a.indexOf(no) < 0) a.push(no)
+  try { localStorage.setItem(CLOUD_DEL_STORE, JSON.stringify(a.slice(-500))) } catch(e){}
+}
+function clearDeleted(){ try { localStorage.removeItem(CLOUD_DEL_STORE) } catch(e){} }
+
+function cloudOn(){ return !!(window.Cloud && Cloud.on() && cloudKey) }
+
+// 任何一次本地改动都会走到这里 —— 攒 1.2 秒再推，避免连点状态时打十几次请求
+function cloudTouch(){
+  if(cloudMute || !cloudOn()) return
+  clearTimeout(cloudTimer)
+  cloudTimer = setTimeout(() => { cloudPush() }, 1200)
+}
+
+function stampOf(o){ return Number(o && (o.updated_at || o.created_at)) || 0 }
+
+// 同一单在两处都有 → 取「最后被改过」的那份
+function mergeByStamp(a, b){
+  const map = new Map()
+  ;[].concat(a || [], b || []).forEach(o => {
+    if(!o || !o.order_no) return
+    const prev = map.get(o.order_no)
+    if(!prev || stampOf(o) >= stampOf(prev)) map.set(o.order_no, o)
+  })
+  const out = [...map.values()].sort((x, y) => stampOf(y) - stampOf(x))
+  // 客户页直传上来的单没有本地 id，而卡片、按钮、展开状态全都靠 id 定位 —— 必须补上
+  out.forEach(o => { if(!o.id) o.id = 'c-' + o.order_no + '-' + Math.random().toString(36).slice(2, 8) })
+  return out
+}
+
+async function cloudPull(silent){
+  if(!cloudOn()) return { ok:false, off:true }
+  if(cloudBusy) return { ok:false, busy:true }
+  cloudBusy = true; if(!silent) renderCloudBar()
+  let r
+  try { r = await Cloud.pull(cloudKey) } finally { cloudBusy = false }
+
+  if(!(r && r.ok)){
+    cloudErr = cloudErrText(r)
+    renderCloudBar()
+    return r || { ok:false }
+  }
+  const before = allOrders().length
+  const merged = mergeByStamp(allOrders(), r.orders)
+  cloudMute = true
+  try { saveOrders(merged) } finally { cloudMute = false }
+  cloudAt = Date.now(); cloudErr = ''
+  renderList()
+  // 本地可能比云端多（上次没推成功的改动）—— 拉完顺手推一次补齐
+  cloudPush(true)
+  return { ok:true, added: Math.max(0, merged.length - before) }
+}
+
+async function cloudPush(silent){
+  if(!cloudOn()) return { ok:false, off:true }
+  const del = pendingDeleted()
+  const r = await Cloud.push(cloudKey, allOrders(), del)
+  if(r && r.ok){
+    if(del.length) clearDeleted()
+    cloudAt = Date.now(); cloudErr = ''
+  } else {
+    cloudErr = cloudErrText(r)
+  }
+  if(!silent) renderCloudBar()
+  return r || { ok:false }
+}
+
+function cloudErrText(r){
+  if(!r) return '连不上'
+  if(r.net) return '网络不通'
+  if(r.off) return '未配置'
+  if(r.error === 'bad_key') return '同步密钥不对'
+  if(r.error === 'locked')  return '密钥错太多次，锁了 30 分钟'
+  if(r.error === 'rate_limited') return '请求太频繁'
+  if(r.error === 'admin_key_not_configured') return '服务端还没配密钥'
+  return r.error ? String(r.error) : '未知错误'
+}
+
+function agoText(ts){
+  if(!ts) return ''
+  const s = Math.floor((Date.now() - ts) / 1000)
+  if(s < 60) return '刚刚'
+  if(s < 3600) return Math.floor(s / 60) + ' 分钟前'
+  if(s < 86400) return Math.floor(s / 3600) + ' 小时前'
+  return Math.floor(s / 86400) + ' 天前'
+}
+
+function renderCloudBar(){
+  const box = document.getElementById('cloud-bar')
+  if(!box) return
+  if(!window.Cloud || !Cloud.on()){
+    box.innerHTML = ''
+    return
+  }
+
+  if(!cloudKey){
+    box.innerHTML = `
+      <div class="cl-bar off">
+        <div class="cl-main">
+          <div class="cl-t">云端同步未开启</div>
+          <div class="cl-d">客户在自己手机上下的单<b>不会自动进来</b>。填一次同步密钥就接通。</div>
+        </div>
+        <button class="cl-btn" onclick="openCloudKey()">去开启</button>
+      </div>`
+    return
+  }
+
+  const cls   = cloudErr ? 'err' : 'ok'
+  const title = cloudErr ? ('云端同步失败：' + cloudErr) : ('云端同步已开启 · ' + (cloudAt ? agoText(cloudAt) : '还没同步过'))
+  const desc  = cloudErr
+    ? '本地台账照常能用，改动会在网络恢复后补推。'
+    : '客户页下的单会自动进来；这边的改动也会推上去。'
+
+  box.innerHTML = `
+    <div class="cl-bar ${cls}">
+      <div class="cl-main">
+        <div class="cl-t">${cloudBusy ? '同步中…' : esc(title)}</div>
+        <div class="cl-d">${esc(desc)}</div>
+      </div>
+      <button class="cl-btn" onclick="cloudPull()">${cloudErr ? '重试' : '立即同步'}</button>
+    </div>`
+}
+
+function openCloudKey(){
+  openSheet(`
+    <div class="sh-title">开启云端同步</div>
+    <div class="sh-sub">把同步密钥粘进来。密钥只存在这台设备的浏览器里，
+      用来证明「拉台账的人是我」。<br><b style="color:#EF9F27">不要发给别人。</b></div>
+    <textarea class="sh-textarea" id="cloud-key-input" placeholder="同步密钥">${esc(cloudKey)}</textarea>
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="doSaveCloudKey()">保存并立即同步</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">取消</button>
+    ${cloudKey ? '<div class="sh-gap"></div><button class="btn-full grey" onclick="doCloudOff()">断开同步（台账不受影响）</button>' : ''}
+  `)
+  setTimeout(() => { const t = document.getElementById('cloud-key-input'); if(t) t.focus() }, 300)
+}
+
+async function doSaveCloudKey(){
+  const el = document.getElementById('cloud-key-input')
+  cloudSaveKey(el ? el.value : '')
+  if(!cloudKey){ closeSheet(); renderCloudBar(); return }
+  closeSheet()
+  renderCloudBar()
+  const r = await cloudPull()
+  if(r && r.ok){
+    toast('已连接 · 云端 ' + allOrders().length + ' 单')
+  } else {
+    toast('连不上：' + cloudErrText(r))
+  }
+}
+
+function doCloudOff(){
+  cloudSaveKey('')
+  // 备份提醒的措辞跟着同步状态变（开着说「服务停了也还在」，关着说「清缓存就没了」），
+  // 所以断开时也要重画一次，否则那句话会停在上一状态。
+  closeSheet(); renderCloudBar(); renderBackupNudge()
+  toast('已断开同步，台账留在本机')
 }
 
 // ==================== 工具 ====================
@@ -350,6 +556,11 @@ function unlock(){
   document.getElementById('lock').style.display = 'none'
   document.getElementById('app').style.display  = 'block'
   renderBoard(); renderChips(); renderList()
+  // 进门就去拉一次云端 —— 客户在别的设备上下的单，这一步才会出现在台账里。
+  // 拉失败不影响任何本地功能，只是顶栏会提示。
+  cloudLoad()
+  renderCloudBar()
+  cloudPull(true)
 }
 
 function resetPin(){
@@ -848,6 +1059,7 @@ function orderFromParsed(p, opts){
     admin_note: '', media: [],
     logs: [{ at: now, text: opts.why || '手工建单' }],
     created_at: ts,
+    updated_at: now,
   }
 }
 
@@ -999,7 +1211,7 @@ function match(o, kw){
 }
 
 function renderList(){
-  renderBoard(); renderChips(); renderLocalStrip(); renderBackupNudge()
+  renderBoard(); renderChips(); renderLocalStrip(); renderBackupNudge(); renderCloudBar()
   const kw = (document.getElementById('kw').value || '').trim().toUpperCase()
 
   let list = allOrders().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))
@@ -1281,11 +1493,18 @@ function renderBackupNudge(){
     : `还没有导出过备份`
   // 紧凑单行条：这个提醒会**长期存在**（每来一单就出现一次，导完才消失），
   // 所以不能做成大块头 —— 否则天天挡在「新建订单」上面，很快就没人看了。
+  // 云端同步开着的时候，不能再说「台账只在浏览器里，清缓存就没了」——
+  // 那句话和下面那条绿色的「云端同步已开启」直接打架，而且它是假的。
+  // 备份这件事本身仍然要做，只是理由变了：导出的是**你自己手里**的那份，
+  // 服务停了、我这边出任何问题，它都还在。
+  const why = cloudOn()
+    ? '导出的是<b>你自己手里</b>的那份 —— 服务停了也还在'
+    : '台账只在浏览器里，<b>清缓存就没了</b>'
   box.innerHTML = `
     <div class="bk-nudge">
       <div class="bk-nudge-main">
         <div class="bk-nudge-t">⚠️ ${what}</div>
-        <div class="bk-nudge-d">台账只在浏览器里，<b>清缓存就没了</b></div>
+        <div class="bk-nudge-d">${why}</div>
       </div>
       <button class="bk-nudge-btn" onclick="doExport()">导出备份</button>
     </div>`

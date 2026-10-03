@@ -51,7 +51,7 @@
       <div class="trust-item">
         <div class="trust-icon">📍</div>
         <div class="trust-label">地址代查</div>
-        <div class="trust-desc">不知道地址？我帮你找</div>
+        <div class="trust-desc">不知道寄哪？我帮你查最新的</div>
       </div>
     </div>
 
@@ -98,7 +98,7 @@
           <div class="timeline-num">01</div>
           <div class="timeline-body">
             <div class="timeline-title">提交订单</div>
-            <div class="timeline-desc">填写艺人姓名、收信地址、你的回信地址。不知道精确地址？填城市就行，我负责查最新的。</div>
+            <div class="timeline-desc">填艺人名字、你的回信地址就够了。不知道艺人现在该寄到哪？勾一下「帮我查最新地址」，我去查。</div>
           </div>
         </div>
         <div class="timeline-item">
@@ -197,16 +197,25 @@
       <div class="field">
         <label class="label">艺人姓名 <span class="req">*</span></label>
         <input class="input" id="o-artist" placeholder="例如 Johnny Depp / Tom Holland">
-        <div class="field-hint">不知道地址没关系，我帮你查</div>
       </div>
       <div class="field">
         <label class="label">收信国家 / 地区 <span class="req">*</span></label>
         <input class="input" id="o-country" placeholder="例如 United States / United Kingdom">
         <div class="field-hint">决定我采购哪个国家的回信邮票</div>
       </div>
-      <div class="field">
-        <label class="label">收信地址（英文，越准越好）<span class="req">*</span></label>
+      <div class="field" style="margin-bottom:14px;">
+        <label class="label">收信地址（英文）<span class="req" id="recipient-req">*</span></label>
         <textarea class="textarea" id="o-recipient" placeholder="艺人工作室 / 经纪公司 / Fan mail 地址&#10;不知道精确地址就填城市或国家，我负责帮你查最新的" maxlength="500"></textarea>
+        <div class="field-hint" id="recipient-hint">不知道精确地址就填城市或国家，我负责帮你查最新的</div>
+      </div>
+
+      <!-- 地址代查开关 -->
+      <div class="lookup-toggle" id="lookup-toggle" onclick="toggleAddrLookup()">
+        <div class="switch" id="lookup-switch"></div>
+        <div class="switch-body">
+          <div class="switch-title">帮我查最新地址</div>
+          <div class="switch-desc">我知道艺人是谁，但不知道现在该寄到哪 —— 交给你查</div>
+        </div>
       </div>
     </div>
 

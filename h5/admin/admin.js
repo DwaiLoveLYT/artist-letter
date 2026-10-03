@@ -701,11 +701,29 @@ function paintRecon(){
   }).join('')
 
   const nOld = reconSel.size, nNew = reconNewSel.size, n = nOld + nNew
+
+  // 台账里已有的那一段。三种情况必须分开，含糊过去就是把线索吞掉：
+  //   ① 有已存在的 → 正常列出来
+  //   ② 一个都没有、但客户发了整段 → 不显示这一段（下面「可以建单」已经说明了）
+  //   ③ 一个都没有、客户也没发整段 → 老实说「不在台账里」，并给出下一步
+  let knownHtml
+  if(known.length){
+    knownHtml = '<div class="rc-list">' + rows + '</div>'
+  } else if(!reconNew.length){
+    knownHtml = '<div class="rc-list">' + reconHits.map(t =>
+      '<div class="rc-row off"><div class="rc-box">?</div><div class="rc-body">'
+      + '<div class="rc-no">' + esc(t) + '</div>'
+      + '<div class="rc-meta">这个尾号不在台账里</div></div></div>').join('') + '</div>'
+      + '<div class="hint">这单是客户在他自己手机上下的，我这边没有。<br>'
+      + '让他把整段「下单信息」发给你，<b>整段粘进来我就能直接建单</b>。</div>'
+  } else {
+    knownHtml = ''
+  }
+
   out.innerHTML =
-    '<div class="rc-head">认出 ' + reconHits.length + ' 个订单号'
+    '<div class="rc-head">认出 ' + Math.max(reconHits.length, reconNew.length) + ' 个订单号'
     + (reconNew.length ? ' · 其中 ' + reconNew.length + ' 单台账里还没有' : '') + '</div>'
-    + (known.length ? '<div class="rc-list">' + rows + '</div>'
-        : '<div class="hint">认出来的订单号都在台账里了</div>')
+    + knownHtml
     + (reconNew.length
         ? '<div class="rc-head" style="margin-top:14px">可以建单（信息齐全）</div>'
           + '<div class="rc-list">' + freshRows + '</div>'

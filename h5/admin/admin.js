@@ -1148,13 +1148,17 @@ function renderBackupNudge(){
   if(!fresh){ box.innerHTML = ''; return }
 
   const what = last
-    ? `备份之后又进来 <b>${fresh} 单</b>，还没有备份`
+    ? `备份之后又进来 <b>${fresh} 单</b>`
     : `还没有导出过备份`
+  // 紧凑单行条：这个提醒会**长期存在**（每来一单就出现一次，导完才消失），
+  // 所以不能做成大块头 —— 否则天天挡在「新建订单」上面，很快就没人看了。
   box.innerHTML = `
     <div class="bk-nudge">
-      <div class="bk-nudge-t">⚠️ ${what}</div>
-      <div class="bk-nudge-d">台账只存在这台设备的浏览器里 —— <b>清缓存或换手机就没了</b>。现在导出一次。</div>
-      <button class="bk-nudge-btn" onclick="doExport()">📤 导出备份</button>
+      <div class="bk-nudge-main">
+        <div class="bk-nudge-t">⚠️ ${what}</div>
+        <div class="bk-nudge-d">台账只在浏览器里，<b>清缓存就没了</b></div>
+      </div>
+      <button class="bk-nudge-btn" onclick="doExport()">导出备份</button>
     </div>`
 }
 

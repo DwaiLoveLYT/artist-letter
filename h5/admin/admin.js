@@ -160,7 +160,7 @@ function cloudErrText(r){
   if(r.net) return '网络不通'
   if(r.off) return '未配置'
   if(r.error === 'bad_key') return '同步密钥不对'
-  if(r.error === 'locked')  return '密钥错太多次，锁了 30 分钟'
+  if(r.error === 'locked')  return '密钥错太多次，已临时锁定（填入正确密钥可立即解锁）'
   if(r.error === 'rate_limited') return '请求太频繁'
   if(r.error === 'admin_key_not_configured') return '服务端还没配密钥'
   return r.error ? String(r.error) : '未知错误'

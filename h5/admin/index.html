@@ -37,6 +37,9 @@
     <!-- 待办看板 -->
     <div class="board" id="board"></div>
 
+    <!-- 新建订单 -->
+    <button class="btn-full" style="margin-bottom:12px;" onclick="openNewOrder()">＋ 新建订单（粘贴客户信息）</button>
+
     <!-- 快速对账 -->
     <div class="card card-accent">
       <div class="card-head"><span class="pulse"></span>快速对账</div>
@@ -44,7 +47,7 @@
         <input class="input" id="recon" maxlength="4" inputmode="text" placeholder="转账备注后 4 位" autocomplete="off">
         <button class="btn-sm" onclick="doReconcile()">查找</button>
       </div>
-      <div class="hint">收到转账后，输备注里的 4 位，一键定位订单</div>
+      <div class="hint">只对「已录进台账」的订单有效。没录过的单，先用上面的「新建订单」粘进来。</div>
       <div id="recon-result"></div>
     </div>
 

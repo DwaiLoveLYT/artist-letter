@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="robots" content="noindex, nofollow">
+<title>接单台账 · 内部</title>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<!-- ==================== 锁屏 ==================== -->
+<div class="lock" id="lock">
+  <div class="lock-inner">
+    <div class="lock-logo">DWAY</div>
+    <div class="lock-title" id="lock-title">输入密码</div>
+    <div class="lock-sub" id="lock-sub">内部台账 · 请勿外传</div>
+    <div class="lock-dots" id="lock-dots"></div>
+    <div class="lock-err" id="lock-err"></div>
+    <div class="keypad" id="keypad"></div>
+    <button class="lock-link" id="lock-reset" style="display:none;">忘记密码</button>
+  </div>
+</div>
+
+<!-- ==================== 主体 ==================== -->
+<div class="app" id="app" style="display:none;">
+
+  <header class="topbar">
+    <div class="brand">接单台账</div>
+    <button class="icon-btn" onclick="openSettings()" aria-label="设置">⚙</button>
+  </header>
+
+  <div class="wrap">
+
+    <!-- 待办看板 -->
+    <div class="board" id="board"></div>
+
+    <!-- 快速对账 -->
+    <div class="card card-accent">
+      <div class="card-head"><span class="pulse"></span>快速对账</div>
+      <div class="recon-row">
+        <input class="input" id="recon" maxlength="4" inputmode="text" placeholder="转账备注后 4 位" autocomplete="off">
+        <button class="btn-sm" onclick="doReconcile()">查找</button>
+      </div>
+      <div class="hint">收到转账后，输备注里的 4 位，一键定位订单</div>
+      <div id="recon-result"></div>
+    </div>
+
+    <!-- 工具 -->
+    <div class="tools">
+      <button class="tool" onclick="doExport()"><span>📤</span>导出备份</button>
+      <button class="tool" onclick="pickImport()"><span>📥</span>导入备份</button>
+      <button class="tool" onclick="copyUnpaid()"><span>📋</span>待收款清单</button>
+    </div>
+
+    <!-- 筛选 -->
+    <div class="chips" id="chips"></div>
+    <input class="input" id="kw" placeholder="搜订单号后 4 位 / 艺人 / 手机号" oninput="renderList()" autocomplete="off">
+
+    <div id="list"></div>
+    <div class="empty" id="empty" style="display:none;">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">没有匹配的订单</div>
+      <div class="empty-sub">换个筛选条件，或清空搜索词</div>
+    </div>
+
+    <div class="footer-note">数据只存在这台设备的浏览器里 · 换手机请先导出备份</div>
+  </div>
+</div>
+
+<!-- ==================== 底部弹层 ==================== -->
+<div class="mask" id="mask" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet"><div class="sheet-inner" id="sheet-inner"></div></div>
+<div id="toast"></div>
+
+<script src="admin.js"></script>
+</body>
+</html>

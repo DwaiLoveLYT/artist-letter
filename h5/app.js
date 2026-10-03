@@ -365,7 +365,34 @@ function copyReceipt(id){
     '金额：¥190',
     `转账备注：${o.order_no.slice(-4)}`,
   ].join('\n'))
+  showGift()      // 刚付完款、正在等，是唯一值得送东西的时刻
 }
+
+// ==================== 送礼：写信指南 ====================
+// 网站不知道钱什么时候真的到账（扫码 + 我手动确认，没有回调）。
+// 所以「送礼」绑在客户自己点「我已转账」那一刻 —— 诚实，而且正是他需要它的时候。
+const GIFT_SEEN='artist_letter_gift_seen'
+let guideFrom='success'
+
+function showGift(){
+  try{ if(localStorage.getItem(GIFT_SEEN)) return }catch(e){}
+  const m=document.getElementById('gift-mask')
+  if(!m) return
+  m.classList.add('on')
+  try{ localStorage.setItem(GIFT_SEEN,'1') }catch(e){}
+}
+function closeGift(){
+  const m=document.getElementById('gift-mask')
+  if(m) m.classList.remove('on')
+}
+function openGuide(){
+  const cur=document.querySelector('.page.active')
+  if(cur && cur.id!=='page-guide') guideFrom=cur.id.replace('page-','')
+  closeGift()
+  goPage('guide')
+}
+// 从哪来回哪去 —— 从订单详情进来的，返回就不该跳到成功页
+function goGuideBack(){ goPage(guideFrom) }
 
 // ==================== 我的订单 ====================
 function renderTrack(){
@@ -427,6 +454,12 @@ function renderDetail(id){
         `).join('')}
       </div>
     </div>
+    <!-- 随单附赠的指南，随时能回来读 -->
+    <div class="card gift-mini" onclick="openGuide()">
+      <div class="gift-mini-title">🎁 写给明星的信 · 完整指南</div>
+      <div class="gift-mini-desc">写什么、写多长、什么时候寄 —— 10 节讲透</div>
+    </div>
+
     ${imgs.length?`
       <div class="card">
         <div class="card-title">手绘信封</div>

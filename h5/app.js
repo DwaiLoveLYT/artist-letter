@@ -37,7 +37,16 @@ function allOrders(){
   try{ const raw=localStorage.getItem(STORE_KEY); const list=JSON.parse(raw); return Array.isArray(list)?list:[] }
   catch(e){ return [] }
 }
-function saveOrders(list){ localStorage.setItem(STORE_KEY, JSON.stringify(list)) }
+let lastSaveOK = true
+function saveOrders(list){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(list)); lastSaveOK=true; return true }
+  catch(e){ lastSaveOK=false; return false }
+}
+// 无痕模式 / 禁用本地存储时，localStorage 会直接抛错
+function storageOK(){
+  try{ localStorage.setItem('__al_probe','1'); localStorage.removeItem('__al_probe'); return true }
+  catch(e){ return false }
+}
 function getOrder(id){ return allOrders().find(o=>o.id===id)||null }
 function addOrder(o){ const list=allOrders(); list.push(o); saveOrders(list); return o }
 function updOrder(id, patch){
@@ -117,6 +126,7 @@ function submitOrder(){
   }
   addOrder(order)
   lastOrderId=order.id
+  const savedOK=lastSaveOK
 
   document.getElementById('s-order-no').innerText='订单号 '+orderNo
   document.getElementById('s-tail').innerText=orderNo.slice(-4)
@@ -134,6 +144,7 @@ function submitOrder(){
 
   initHome() // 更新顶部统计
   goPage('success')
+  if(!savedOK) toast('本机无法保存订单，请截图订单号')
 }
 
 function orderInfoText(o){
@@ -158,6 +169,15 @@ function renderTrack(){
   const orders=allOrders().sort((a,b)=>(b.created_at||0)-(a.created_at||0))
   const listEl=document.getElementById('track-list')
   const emptyEl=document.getElementById('track-empty')
+  const warnEl=document.getElementById('track-warn')
+
+  if(warnEl){
+    warnEl.innerHTML = storageOK() ? '' :
+      '<div style="background:rgba(239,159,39,.1); border:1px solid rgba(239,159,39,.3); color:#EF9F27;'
+      + ' border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.6; margin-bottom:14px;">'
+      + '⚠️ 当前浏览器不允许本地保存订单（可能是无痕模式）。订单不会留存，请截图订单号，'
+      + '加微信 <b>IMDWAY</b> 查进度。</div>'
+  }
 
   if(!orders.length){ listEl.innerHTML=''; emptyEl.style.display='block'; return }
   emptyEl.style.display='none'

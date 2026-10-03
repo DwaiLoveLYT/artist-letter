@@ -1,5 +1,53 @@
 // ==================== 配置 ====================
-const CONTACT_WX = 'IMDWAY'
+// 客服分两个微信号：工作日 ymzx0618、周末 IMDWAY。
+// 页面会按当天星期自动标出该找谁，不用客户自己算今天周几。
+const CONTACTS = {
+  weekday: { label:'工作日', range:'周一至周五', id:'ymzx0618' },
+  weekend: { label:'周末',   range:'周六、周日', id:'IMDWAY' },
+}
+const TZ_NOTE = '有北美时差，回复不是秒回。看到就会回你，请耐心等一等。'
+
+function todayContact(){
+  const d = new Date().getDay()              // 0 = 周日, 6 = 周六
+  return (d === 0 || d === 6) ? 'weekend' : 'weekday'
+}
+function wxId(){ return CONTACTS[todayContact()].id }
+
+function contactCardHtml(){
+  const today = todayContact()
+  const row = key => {
+    const c  = CONTACTS[key]
+    const on = key === today
+    return `
+      <div class="contact-row ${on ? 'today' : ''}">
+        <div class="contact-left">
+          <div class="contact-when">${c.label} · ${c.range}${
+            on ? '<span class="contact-today">今天找这个</span>' : ''}</div>
+          <div class="contact-id">${c.id}</div>
+        </div>
+        <button class="contact-copy" onclick="copyText('${c.id}')">复制</button>
+      </div>`
+  }
+  return `
+    <div class="card contact-card">
+      <div class="card-title">找我们</div>
+      ${row('weekday')}
+      ${row('weekend')}
+      <div class="contact-note">⏱ ${TZ_NOTE}</div>
+    </div>`
+}
+
+function initContacts(){
+  const home = document.getElementById('contact-home')
+  if(home) home.innerHTML = contactCardHtml()
+  const succ = document.getElementById('contact-success')
+  if(succ) succ.innerHTML = contactCardHtml()
+  document.querySelectorAll('.js-wx').forEach(el => { el.innerText = wxId() })
+  const btn = document.getElementById('empty-wx-btn')
+  if(btn) btn.innerText = '用订单号找客服查：复制 ' + wxId()
+}
+function copyContactWx(){ copyText(wxId()) }
+
 const RECEIVE_ADDR = '中国广东省深圳市南山区泉园路61号绿茵丰和，直接放东门保安室。188888888'
 const PAY_QR = 'images/pay-qr.jpg'
 
@@ -78,6 +126,7 @@ function scrollToHow(){
 // ==================== 首页 ====================
 const SHOWCASE=[]
 function initHome(){
+  initContacts()
   if(SHOWCASE.length){
     document.getElementById('showcase-section').style.display='block'
     document.getElementById('showcase-gallery').innerHTML=SHOWCASE.map(src=>
@@ -229,7 +278,7 @@ function renderTrack(){
       '<div style="background:rgba(239,159,39,.1); border:1px solid rgba(239,159,39,.3); color:#EF9F27;'
       + ' border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.6; margin-bottom:14px;">'
       + '⚠️ 当前浏览器不允许本地保存订单（可能是无痕模式）。订单不会留存，请截图订单号，'
-      + '加微信 <b>IMDWAY</b> 查进度。</div>'
+      + '加微信 <b>' + wxId() + '</b> 查进度。</div>'
   }
 
   if(!orders.length){ listEl.innerHTML=''; emptyEl.style.display='block'; return }

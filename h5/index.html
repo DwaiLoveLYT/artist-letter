@@ -297,19 +297,13 @@
       <button class="btn-ghost" onclick="copyOrderNo()">复制订单号</button>
     </div>
 
-    <!-- 付款引导卡（由 payGuideHtml 渲染） -->
+    <!-- 付款引导卡（由 payGuideHtml 渲染，含「发我订单信息」这一步） -->
     <div id="s-pay"></div>
 
-    <div class="save-tip">
-      📸 先复制或截图存下这串订单号<br>
-      订单存在你当前这台设备的浏览器里，换设备或清缓存后查不到，凭订单号加微信 <b class="js-wx">IMDWAY</b> 一样能查
-    </div>
-
-    <div class="card">
-      <div class="card-title">把订单信息发给我</div>
-      <div class="tiny" style="margin-bottom:12px;">点一下，选微信发给我就行 —— 不用一条条打</div>
-      <button class="btn" onclick="shareOrderInfo()">发给客服（一键分享）</button>
-      <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>
+    <div class="save-tip save-tip-warn">
+      ⚠️ <b>订单信息一定要发我微信</b><br>
+      订单只存在你这台设备的浏览器里，我这边没有。付款后点上面那个「发给客服」发我一次 ——
+      不然我收到钱，也不知道是谁的单。
     </div>
 
     <!-- 客服联系（按当天自动标出该找谁） -->

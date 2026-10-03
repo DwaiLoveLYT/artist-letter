@@ -380,7 +380,8 @@ function payGuideHtml(o){
         <div class="pay-handoff-h">② 付完款，把订单信息发我一次</div>
         <div class="pay-handoff-d">
           订单只存在你这台设备的浏览器里，<b>我这边看不到</b>。<br>
-          点一下，选微信发给我就行，不用一条条打。
+          点一下，选微信发给我就行，不用一条条打 ——
+          我收到这一段，你的单就直接进我这边了。
         </div>
         <button class="btn btn-large" onclick="shareOrderInfo()">发给客服（一键分享）</button>
         <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>

@@ -154,8 +154,15 @@
           <div class="faq-q">付款后多久能画好？</div>
           <div class="faq-a">确认收款后一周内出图（含设计构思 + 手绘绘制）。出图后先发你确认，不满意可沟通修改一次。有进展会随时更新在「我的订单」。</div>
         </div>
+        <div class="faq-item">
+          <div class="faq-q">发消息多久能回？</div>
+          <div class="faq-a">客服有北美时差，不是秒回，看到就会回你。工作日和周末是两个不同的客服号，往下翻「找我们」那一栏，会按当天自动标出该加哪个。急事请把订单号一起发过来。</div>
+        </div>
       </div>
     </div>
+
+    <!-- 客服联系 -->
+    <div id="contact-home"></div>
 
     <!-- 底部 CTA -->
     <div class="bottom-cta">
@@ -164,7 +171,7 @@
       <button class="btn btn-large" onclick="goPage('order')">立即下单 ¥190</button>
       <button class="btn-ghost btn-large" onclick="goPage('track')">查看我的订单</button>
       <div class="bottom-cta-contact">
-        有疑问？加微信 <b>IMDWAY</b> 咨询
+        有疑问？今天找 <b class="js-wx">IMDWAY</b> 咨询
       </div>
     </div>
   </div>
@@ -265,7 +272,7 @@
 
     <div class="save-tip">
       📸 建议截图保存这串订单号<br>
-      订单存在你当前这台设备的浏览器里，换设备或清缓存后查不到，凭订单号加微信 <b>IMDWAY</b> 一样能查
+      订单存在你当前这台设备的浏览器里，换设备或清缓存后查不到，凭订单号加微信 <b class="js-wx">IMDWAY</b> 一样能查
     </div>
 
     <div class="card">
@@ -273,8 +280,10 @@
       <div class="tiny" style="margin-bottom:12px;">点一下，选微信发给我就行 —— 不用一条条打</div>
       <button class="btn" onclick="shareOrderInfo()">发给客服（一键分享）</button>
       <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>
-      <button class="btn-ghost" onclick="copyText('IMDWAY')">复制客服微信：IMDWAY</button>
     </div>
+
+    <!-- 客服联系（按当天自动标出该找谁） -->
+    <div id="contact-success"></div>
 
     <div class="card">
       <div class="card-title">手写信寄到这</div>
@@ -316,7 +325,7 @@
       <div class="empty-title">这台设备上还没有订单</div>
       <div class="empty-desc">订单保存在你当前浏览器的本地，换设备或清理缓存后就查不到了</div>
       <button class="btn" onclick="goPage('order')">去下单</button>
-      <button class="btn-ghost" onclick="copyText('IMDWAY')">用订单号找客服查：复制 IMDWAY</button>
+      <button class="btn-ghost" id="empty-wx-btn" onclick="copyContactWx()">用订单号找客服查</button>
     </div>
   </div>
 </section>

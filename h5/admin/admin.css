@@ -50,6 +50,30 @@ button { cursor:pointer; border:none; background:none; color:inherit; }
   text-decoration:underline; text-underline-offset:3px;
 }
 
+/* ---------- 邮箱 / 恢复码 步骤 ---------- */
+.lock-inner { max-height:100vh; overflow-y:auto; padding-top:20px; padding-bottom:20px; }
+.lock-field { margin:20px 0 2px; text-align:left; }
+.lock-field .input { text-align:center; letter-spacing:1px; }
+.lock-actions { display:flex; flex-direction:column; gap:9px; margin-top:18px; }
+.lock-code {
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size:29px; font-weight:700; letter-spacing:3px;
+  color:#5DCAA5; font-variant-numeric:tabular-nums;
+  background:rgba(93,202,165,.07);
+  border:1px solid rgba(93,202,165,.22);
+  border-radius:12px; padding:17px 8px; margin:20px 0 10px;
+  word-break:break-all; line-height:1.25;
+}
+.lock-note { font-size:12px; color:#6a6a62; line-height:1.65; }
+.lock-warn {
+  background:rgba(239,159,39,.09);
+  border:1px solid rgba(239,159,39,.28);
+  border-radius:11px; padding:13px 14px;
+  font-size:12.5px; color:#c9a266; line-height:1.7;
+  text-align:left; margin:18px 0 2px;
+}
+.lock-warn b { color:#EF9F27; }
+
 /* ==================== 主体 ==================== */
 .app { max-width:430px; margin:0 auto; background:#141413; min-height:100vh; padding-bottom:34px; }
 .topbar {

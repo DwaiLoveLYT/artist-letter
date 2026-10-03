@@ -75,67 +75,271 @@ function fbCopy(text){
   document.body.removeChild(ta)
 }
 
-// ==================== 锁屏 ====================
+// ==================== 锁屏 · 密码 / 恢复码 ====================
+// 设计取舍：后台是纯静态页、数据全在本机 localStorage，没有服务端。
+// 所以「服务端发邮箱验证码」这条路走不通（前端发邮件会把密钥暴露）。
+// 改成：设置密码时生成一次性「恢复码」，由你自己存进邮箱/微信收藏，
+// 忘记密码时用恢复码重设。等效于「邮箱里那把备用钥匙」，但零依赖、零成本。
+// 另外把密码从明文改成 SHA-256 存储，补上「读 localStorage 就能看到密码」的口子。
+
+const RECOV_KEY = 'artist_letter_recovery_hash'
+const EMAIL_KEY = 'artist_letter_admin_email'
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   // 去掉易混的 I O 0 1
+
 let pinBuf = '', pinMode = 'verify', pinFirst = ''
+let lockStep = 'pin'      // pin | email | recovery | recover | wipe
+let tmpPin = '', tmpEmail = '', tmpRecovery = '', isResetting = false
+
+// ---------- 哈希 ----------
+async function sha(s){
+  const text = 'al::' + s
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('')
+  } catch(e){
+    return 'plain:' + text            // 非安全上下文兜底，功能不受影响
+  }
+}
+async function verifyPin(input){
+  const stored = localStorage.getItem(PIN_KEY) || ''
+  if(!stored) return false
+  if(stored.indexOf('plain:') === 0) return stored === 'plain:al::' + input
+  if(/^[0-9a-f]{64}$/.test(stored))  return stored === await sha(input)
+  // 旧版本存的是明文 6 位 → 校验通过后顺手升级成哈希，把口子补上
+  if(stored === input){ localStorage.setItem(PIN_KEY, await sha(input)); return true }
+  return false
+}
+function normCode(s){ return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '') }
+async function verifyRecovery(input){
+  const stored = localStorage.getItem(RECOV_KEY) || ''
+  if(!stored) return false
+  return stored === await sha('rc::' + normCode(input))
+}
+async function storeRecovery(code){
+  localStorage.setItem(RECOV_KEY, await sha('rc::' + normCode(code)))
+}
+function makeRecoveryCode(){
+  let s = ''
+  for(let i = 0; i < 8; i++) s += CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)]
+  return s.slice(0,4) + '-' + s.slice(4)
+}
+function recoveryMailto(code, email){
+  const subject = encodeURIComponent('接单台账 · 后台恢复码（请长期保存）')
+  const body = encodeURIComponent([
+    '这是「接单台账」后台的恢复码。忘记密码时用它重设，所以请长期保留这封邮件。',
+    '',
+    '恢复码：' + code,
+    '',
+    '后台地址：' + location.origin + location.pathname,
+    '生成时间：' + new Date().toLocaleString('zh-CN'),
+    '',
+    '提醒：恢复码只在设置时显示一次。重设密码后，旧恢复码会自动作废。',
+  ].join('\n'))
+  return 'mailto:' + email + '?subject=' + subject + '&body=' + body
+}
+function mailRecovery(code){
+  const email = localStorage.getItem(EMAIL_KEY) || ''
+  if(!email){ toast('还没登记邮箱'); return }
+  window.location.href = recoveryMailto(code, email)
+}
+
+// ---------- 渲染 ----------
+function lockShell(title, sub, body){
+  return '<div class="lock-logo">DWAY</div>'
+       + '<div class="lock-title">' + title + '</div>'
+       + '<div class="lock-sub">' + sub + '</div>'
+       + body
+}
+
+function renderLock(){
+  const el = document.getElementById('lock-inner')
+  if(!el) return
+
+  if(lockStep === 'pin'){
+    const t = pinMode === 'set' ? '设置访问密码'
+            : pinMode === 'confirm' ? '再输一次确认' : '输入密码'
+    const s = pinMode === 'set' ? PIN_LEN + ' 位数字 · 只存在这台设备里'
+            : pinMode === 'confirm' ? '两次要一致'
+            : '内部台账 · 请勿外传'
+    el.innerHTML = lockShell(t, s,
+      '<div class="lock-dots" id="lock-dots"></div>'
+      + '<div class="lock-err" id="lock-err"></div>'
+      + '<div class="keypad" id="keypad"></div>'
+      + (pinMode === 'verify' ? '<button class="lock-link" id="lock-reset">忘记密码</button>' : ''))
+    buildKeypad(); paintDots()
+    const r = document.getElementById('lock-reset')
+    if(r) r.onclick = goRecover
+    return
+  }
+
+  if(lockStep === 'email'){
+    el.innerHTML = lockShell('留个邮箱', '恢复码会发到这里。跳过也行，但要自己存好。',
+      '<div class="lock-field"><input class="input" id="lock-input" type="email" inputmode="email"'
+      + ' placeholder="你的邮箱" autocomplete="off" value="' + esc(tmpEmail) + '"></div>'
+      + '<div class="lock-actions">'
+      + '<button class="btn-full" id="lock-next">下一步</button>'
+      + '<button class="btn-full grey" id="lock-skip">跳过，我自己存</button></div>')
+    document.getElementById('lock-next').onclick = () => {
+      tmpEmail = (document.getElementById('lock-input').value || '').trim()
+      lockStep = 'recovery'; tmpRecovery = makeRecoveryCode(); renderLock()
+    }
+    document.getElementById('lock-skip').onclick = () => {
+      tmpEmail = ''; lockStep = 'recovery'; tmpRecovery = makeRecoveryCode(); renderLock()
+    }
+    setTimeout(() => { const i = document.getElementById('lock-input'); if(i) i.focus() }, 120)
+    return
+  }
+
+  if(lockStep === 'recovery'){
+    el.innerHTML = lockShell('保存这串恢复码', '忘记密码时用它重设。只显示这一次。',
+      '<div class="lock-code">' + esc(tmpRecovery) + '</div>'
+      + '<div class="lock-note">建议现在就存到微信收藏、备忘录，或发到自己邮箱。</div>'
+      + '<div class="lock-actions">'
+      + '<button class="btn-full" id="lock-copy">复制恢复码</button>'
+      + (tmpEmail ? '<button class="btn-full grey" id="lock-mail">发到 ' + esc(tmpEmail) + '</button>' : '')
+      + '<button class="btn-full grey" id="lock-done">我已保存，进入台账</button></div>')
+    document.getElementById('lock-copy').onclick = () => copy(tmpRecovery)
+    const mb = document.getElementById('lock-mail')
+    if(mb) mb.onclick = () => { window.location.href = recoveryMailto(tmpRecovery, tmpEmail) }
+    document.getElementById('lock-done').onclick = finishSetup
+    return
+  }
+
+  if(lockStep === 'recover'){
+    el.innerHTML = lockShell('输入恢复码', '8 位，形如 4F7K-92MP。在你保存它的地方找。',
+      '<div class="lock-field"><input class="input" id="lock-input2" type="text"'
+      + ' autocapitalize="characters" placeholder="恢复码" autocomplete="off"></div>'
+      + '<div class="lock-err" id="lock-err"></div>'
+      + '<div class="lock-actions">'
+      + '<button class="btn-full" id="lock-verify">验证并重设密码</button>'
+      + '<button class="btn-full grey" id="lock-nocode">我没有恢复码</button></div>')
+    document.getElementById('lock-verify').onclick = doRecover
+    document.getElementById('lock-nocode').onclick = () => { lockStep = 'wipe'; renderLock() }
+    setTimeout(() => { const i = document.getElementById('lock-input2'); if(i) i.focus() }, 120)
+    return
+  }
+
+  if(lockStep === 'wipe'){
+    el.innerHTML = lockShell('放弃门锁？', '数据不会丢，但锁就没了。',
+      '<div class="lock-warn">没有恢复码，就无法验证是你本人。<br>'
+      + '清空密码后，<b>任何拿到这台手机、知道这个网址的人都能看到全部订单</b>——'
+      + '客户姓名、电话、地址、回信地址。<br>订单数据本身不会被删除。</div>'
+      + '<div class="lock-actions">'
+      + '<button class="btn-full danger" id="lock-wipe">我确认，清空密码</button>'
+      + '<button class="btn-full grey" id="lock-back">返回，我再找找恢复码</button></div>')
+    document.getElementById('lock-wipe').onclick = doWipePin
+    document.getElementById('lock-back').onclick = () => { lockStep = 'recover'; renderLock() }
+    return
+  }
+}
 
 function initLock(){
-  const saved = localStorage.getItem(PIN_KEY)
-  pinMode = saved ? 'verify' : 'set'
-  document.getElementById('lock-title').innerText = saved ? '输入密码' : '设置访问密码'
-  document.getElementById('lock-sub').innerText   = saved ? '内部台账 · 请勿外传' : `请设置 ${PIN_LEN} 位数字密码`
-  document.getElementById('lock-reset').style.display = saved ? 'block' : 'none'
-  buildKeypad(); paintDots()
+  const has = !!localStorage.getItem(PIN_KEY)
+  pinBuf = ''; pinFirst = ''; tmpPin = ''; tmpRecovery = ''
+  tmpEmail = localStorage.getItem(EMAIL_KEY) || ''
+  pinMode = has ? 'verify' : 'set'
+  lockStep = 'pin'
+  renderLock()
 }
 
+// ---------- 键盘 ----------
 function buildKeypad(){
+  const box = document.getElementById('keypad')
+  if(!box) return
   const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫']
-  document.getElementById('keypad').innerHTML = keys.map(k => {
+  box.innerHTML = keys.map(k => {
     if(k === '') return '<button class="key ghost" disabled></button>'
-    if(k === '⌫') return `<button class="key ghost" onclick="pinDel()">⌫</button>`
-    return `<button class="key" onclick="pinPush('${k}')">${k}</button>`
+    if(k === '⌫') return '<button class="key ghost" onclick="pinDel()">⌫</button>'
+    return '<button class="key" onclick="pinPush(\'' + k + '\')">' + k + '</button>'
   }).join('')
 }
-
 function paintDots(){
+  const d = document.getElementById('lock-dots')
+  if(!d) return
   const n = pinBuf.length
-  document.getElementById('lock-dots').innerHTML =
-    Array.from({length: PIN_LEN}, (_,i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')
+  d.innerHTML = Array.from({length: PIN_LEN}, (_,i) => '<i class="' + (i < n ? 'on' : '') + '"></i>').join('')
 }
-
 function pinErr(msg){
   const err = document.getElementById('lock-err')
-  err.innerText = msg
+  if(err) err.innerText = msg
   const dots = document.getElementById('lock-dots')
+  if(!dots) return
   dots.classList.add('shake')
   setTimeout(() => dots.classList.remove('shake'), 340)
 }
-
 function pinPush(d){
   if(pinBuf.length >= PIN_LEN) return
   pinBuf += d; paintDots()
-  document.getElementById('lock-err').innerText = ''
+  const e = document.getElementById('lock-err'); if(e) e.innerText = ''
   if(pinBuf.length === PIN_LEN) setTimeout(submitPin, 130)
 }
 function pinDel(){ pinBuf = pinBuf.slice(0,-1); paintDots() }
 
-function submitPin(){
+async function submitPin(){
   if(pinMode === 'verify'){
-    if(pinBuf === localStorage.getItem(PIN_KEY)){ unlock() }
+    const ok = await verifyPin(pinBuf)
+    if(ok){ pinBuf = ''; unlock() }
     else { pinBuf = ''; paintDots(); pinErr('密码不对') }
     return
   }
   if(pinMode === 'set'){
-    pinFirst = pinBuf; pinBuf = ''; pinMode = 'confirm'; paintDots()
-    document.getElementById('lock-title').innerText = '再输一次确认'
+    pinFirst = pinBuf; pinBuf = ''; pinMode = 'confirm'; renderLock()
     return
   }
+  // confirm
   if(pinBuf === pinFirst){
-    localStorage.setItem(PIN_KEY, pinBuf); unlock(); toast('密码已设置')
+    tmpPin = pinBuf; pinBuf = ''
+    if(isResetting){
+      isResetting = false
+      lockStep = 'recovery'; tmpRecovery = makeRecoveryCode(); renderLock()
+      toast('新恢复码已生成，请存好')
+    } else {
+      lockStep = 'email'; renderLock()
+    }
   } else {
-    pinBuf = ''; pinFirst = ''; pinMode = 'set'; paintDots()
-    document.getElementById('lock-title').innerText = '设置访问密码'
-    pinErr('两次不一致，重新设置')
+    pinBuf = ''; pinFirst = ''; pinMode = 'set'; renderLock(); pinErr('两次不一致，重新设置')
   }
+}
+
+async function finishSetup(){
+  localStorage.setItem(PIN_KEY, await sha(tmpPin))
+  await storeRecovery(tmpRecovery)
+  if(tmpEmail) localStorage.setItem(EMAIL_KEY, tmpEmail)
+  else localStorage.removeItem(EMAIL_KEY)
+  tmpPin = ''
+  unlock()
+  toast('密码已设置')
+}
+
+// ---------- 找回 ----------
+function goRecover(){
+  lockStep = 'recover'
+  pinBuf = ''; pinFirst = ''
+  renderLock()
+}
+
+async function doRecover(){
+  const el  = document.getElementById('lock-input2')
+  const err = document.getElementById('lock-err')
+  const v = ((el && el.value) || '').trim()
+  if(!v){ if(err) err.innerText = '先输入恢复码'; return }
+  const ok = await verifyRecovery(v)
+  if(!ok){ if(err) err.innerText = '恢复码不对。检查一下字符，连字符可以不用打。'; return }
+  isResetting = true
+  pinMode = 'set'; pinBuf = ''; pinFirst = ''
+  lockStep = 'pin'
+  renderLock()
+  toast('验证通过，请设置新密码')
+}
+
+function doWipePin(){
+  localStorage.removeItem(PIN_KEY)
+  localStorage.removeItem(RECOV_KEY)
+  isResetting = false
+  pinMode = 'set'; pinBuf = ''; pinFirst = ''
+  lockStep = 'pin'
+  renderLock()
+  toast('已清空密码，请重设')
 }
 
 function unlock(){
@@ -147,15 +351,66 @@ function unlock(){
 function resetPin(){
   openSheet(`
     <div class="sh-title">重设访问密码</div>
-    <div class="sh-sub">密码只存在这台设备里，清掉之后需要重新设置。<br>
-      <b style="color:#EF9F27">注意：这等于放弃了唯一一道门锁</b>——任何拿到你手机并知道这个网址的人都能看到全部订单。</div>
-    <button class="sh-opt danger" onclick="doResetPin()">确认清除密码</button>
-    <button class="sh-opt" onclick="closeSheet()">取消</button>
+    <div class="sh-sub">会回到锁屏重新设置，并<b style="color:#EF9F27">生成新的恢复码</b>（旧的立刻作废）。<br>
+      订单数据不受影响。</div>
+    <button class="sh-opt" onclick="doResetPin()">重设密码 + 换新恢复码</button>
+    <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">取消</button>
   `)
 }
 function doResetPin(){
   localStorage.removeItem(PIN_KEY)
-  closeSheet(); pinBuf = ''; pinFirst = ''; initLock(); toast('已清除，请重设密码')
+  localStorage.removeItem(RECOV_KEY)
+  closeSheet()
+  isResetting = false
+  initLock()
+  toast('请设置新密码')
+}
+
+function regenRecovery(){
+  const has = !!localStorage.getItem(RECOV_KEY)
+  openSheet(`
+    <div class="sh-title">重新生成恢复码？</div>
+    <div class="sh-sub">${has ? '旧的恢复码立刻作废。' : '你还没设置过恢复码。'}
+      弄丢了、或者怀疑被别人看到过，就换一个。</div>
+    <button class="sh-opt" onclick="doRegenRecovery()">生成新的恢复码</button>
+    <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">取消</button>
+  `)
+}
+async function doRegenRecovery(){
+  const code  = makeRecoveryCode()
+  await storeRecovery(code)
+  const email = localStorage.getItem(EMAIL_KEY) || ''
+  openSheet(`
+    <div class="sh-title">新恢复码</div>
+    <div class="sh-sub">只显示这一次，现在就存好。</div>
+    <div class="lock-code">${esc(code)}</div>
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="copy('${code}')">复制恢复码</button>
+    <div class="sh-gap"></div>
+    ${email ? `<button class="btn-full grey" onclick="mailRecovery('${code}')">发到 ${esc(email)}</button><div class="sh-gap"></div>` : ''}
+    <button class="btn-full grey" onclick="closeSheet()">我存好了</button>
+  `)
+}
+
+function editEmail(){
+  const cur = localStorage.getItem(EMAIL_KEY) || ''
+  openSheet(`
+    <div class="sh-title">恢复邮箱</div>
+    <div class="sh-sub">只用来把恢复码发给你，不做别的。留空就不发。</div>
+    <input class="input" id="email-input" type="email" inputmode="email"
+           placeholder="你的邮箱" value="${esc(cur)}" autocomplete="off">
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="saveEmail()">保存</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">取消</button>
+  `)
+  setTimeout(() => { const i = document.getElementById('email-input'); if(i) i.focus() }, 280)
+}
+function saveEmail(){
+  const v = (document.getElementById('email-input').value || '').trim()
+  if(v) localStorage.setItem(EMAIL_KEY, v); else localStorage.removeItem(EMAIL_KEY)
+  closeSheet()
+  toast(v ? '已登记 ' + v : '已清除邮箱')
 }
 
 // ==================== 看板 ====================
@@ -772,7 +1027,9 @@ function doImport(){
 
 // ==================== 设置 ====================
 function openSettings(){
-  const list = allOrders()
+  const list  = allOrders()
+  const email = localStorage.getItem(EMAIL_KEY) || '未登记'
+  const hasRec = !!localStorage.getItem(RECOV_KEY)
   openSheet(`
     <div class="sh-title">设置</div>
     <div class="sh-sub">
@@ -782,6 +1039,8 @@ function openSettings(){
     <button class="sh-opt" onclick="doExport()">📤 导出备份</button>
     <button class="sh-opt" onclick="pickImport()">📥 导入备份</button>
     <button class="sh-opt" onclick="resetPin()">🔑 重设访问密码</button>
+    <button class="sh-opt" onclick="regenRecovery()">🎫 重新生成恢复码<small>${hasRec ? '已设置 · 弄丢或泄露了就换一个' : '还没设置'}</small></button>
+    <button class="sh-opt" onclick="editEmail()">✉️ 恢复邮箱<small>${esc(email)}</small></button>
     <button class="sh-opt danger" onclick="sheetWipe()">🗑 清空全部台账</button>
     <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">关闭</button>
   `)
@@ -820,5 +1079,4 @@ function viewImage(src){
 document.addEventListener('DOMContentLoaded', () => {
   initLock()
   document.getElementById('recon').addEventListener('keydown', e => { if(e.key === 'Enter') doReconcile() })
-  document.getElementById('lock-reset').onclick = resetPin
 })

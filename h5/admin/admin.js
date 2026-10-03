@@ -1129,19 +1129,27 @@ function copyUnpaid(){
 // ==================== 备份 ====================
 // 台账只住在浏览器里，清缓存 / 换手机就没了 —— 而云端还没有。
 // 底部那行「换手机请先导出备份」是静态小字，没人会读第二遍，
-// 所以改成主动提醒：久没导出就把这事顶到眼前，导完自动消失。
+// 所以改成主动提醒：**有单没进过备份**就把这事顶到眼前，导完自动消失。
+// 不用「几天没导出」那种日历规则 —— 昨天刚导过、今天来了 5 单，
+// 日历会说「还早」，可这 5 单一张纸都没有；反过来没有新单时催也没意义。
 const EXPORT_KEY = 'artist_letter_admin_last_export'
-const BACKUP_MAX_DAYS = 7
 
 function renderBackupNudge(){
   const box = document.getElementById('backup-nudge')
   if(!box) return
-  if(!allOrders().length){ box.innerHTML = ''; return }   // 台账空的，没什么可丢
+  const list = allOrders()
+  if(!list.length){ box.innerHTML = ''; return }          // 台账空的，没什么可丢
   let last = 0
   try { last = Number(localStorage.getItem(EXPORT_KEY)) || 0 } catch(e){}
-  const days = last ? Math.floor((Date.now() - last) / 86400000) : -1
-  if(last && days < BACKUP_MAX_DAYS){ box.innerHTML = ''; return }
-  const what = last ? `已经 <b>${days} 天</b>没导出备份了` : `还没有导出过备份`
+
+  const fresh = last
+    ? list.filter(o => (o.created_at || 0) > last).length
+    : list.length                                          // 从没导过 → 全都在裸奔
+  if(!fresh){ box.innerHTML = ''; return }
+
+  const what = last
+    ? `备份之后又进来 <b>${fresh} 单</b>，还没有备份`
+    : `还没有导出过备份`
   box.innerHTML = `
     <div class="bk-nudge">
       <div class="bk-nudge-t">⚠️ ${what}</div>
@@ -1151,19 +1159,21 @@ function renderBackupNudge(){
 }
 
 function doExport(){
+  // 先取时间戳、再读单：导出过程中刚好进来的新单，不会被误标成「已备份」。
+  const stamp = Date.now()
   const list = allOrders()
   if(!list.length){ toast('台账还是空的'); return }
-  const data = { app:'artist-letter', version:1, exported_at: new Date().toISOString(), orders: list }
+  const data = { app:'artist-letter', version:1, exported_at: new Date(stamp).toISOString(), orders: list }
   const json = JSON.stringify(data, null, 2)
 
   try {
     const blob = new Blob([json], { type:'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `台账备份_${fmtDay(Date.now())}.json`
+    a.download = `台账备份_${fmtDay(stamp)}.json`
     document.body.appendChild(a); a.click()
     setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a) }, 1500)
-    try { localStorage.setItem(EXPORT_KEY, String(Date.now())) } catch(e){}
+    try { localStorage.setItem(EXPORT_KEY, String(stamp)) } catch(e){}
     renderBackupNudge()          // 导完就把提醒收掉
     toast('已导出 ' + list.length + ' 单')
   } catch(e){

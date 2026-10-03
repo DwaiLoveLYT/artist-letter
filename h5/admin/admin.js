@@ -616,7 +616,6 @@ function runPasteRecon(){
   const out = document.getElementById('recon-out')
   const text = ((ta && ta.value) || '').trim()
   if(!text){ toast('先把内容粘进来'); return }
-
   reconHits   = scanTails(text)
   reconSel    = new Set()
   reconNew    = []
@@ -645,6 +644,7 @@ function runPasteRecon(){
       + '① 客户发来的信息里带订单号吗？没有的话，让他点他页面上的「复制下单信息」再发一次。<br>'
       + '② 这一单录进台账了吗？没录过的话，把客户发来的整段粘进来就行 —— 带「订单号：」的那种。<br>'
       + '台账目前共 <b>' + n + '</b> 单。</div>'
+    revealRecon()
     return
   }
 
@@ -654,6 +654,16 @@ function runPasteRecon(){
     if(o && o.pay_status !== 'paid') reconSel.add(t)
   })
   paintRecon()
+  revealRecon()
+}
+
+// 结果和「确认」按钮在粘贴框下面，识别完直接滚过去 ——
+// 客户一次发两条的时候，结果会长到把按钮顶到屏幕外面，不滚过去会以为没反应。
+// 只在「点了开始识别」之后滚，勾选框的每次重绘都不滚（否则点一下就跳一下）。
+function revealRecon(){
+  const out = document.getElementById('recon-out')
+  if(!out || !out.scrollIntoView) return
+  setTimeout(() => { try { out.scrollIntoView({ behavior:'smooth', block:'start' }) } catch(e){} }, 60)
 }
 
 function paintRecon(){

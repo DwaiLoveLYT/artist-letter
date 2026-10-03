@@ -137,13 +137,34 @@ function scrollToHow(){
 }
 
 // ==================== 首页 ====================
+// 往这里丢实拍图路径即可。SHOWCASE[0] 会同时成为首页主视觉，
+// 全部图片进作品墙 —— 一次填写，点亮两处。
 const SHOWCASE=[]
+
+// 主视觉「图片就绪」：
+// 这个页面卖的是手绘信封 —— 一件纯视觉的手工件，但整站原本没有一张产品图，
+// 首屏只有渐变上的文字。在信息流里划到这一页的人，0.3 秒内需要一个具象锚点，
+// 而文字和符号化图标给不了。有实拍图就把图顶到标题上面；没有就保持纯文字，
+// 不会出现空框或破图。
+function initHero(){
+  const fig=document.getElementById('hero-figure')
+  if(!fig) return
+  const src=SHOWCASE[0]
+  if(!src){ fig.style.display='none'; return }
+  fig.style.display='block'
+  fig.innerHTML=`<img class="hero-figure-img" src="${escapeHtml(src)}" alt="手绘信封实拍" onclick="previewImage(this.src)">`
+}
+
 function initHome(){
   initContacts()
+  initHero()
+  const sec=document.getElementById('showcase-section')
+  if(!sec) return
+  // 显隐双向设置 —— 只写 block 的话，数组变空时这一段永远收不回去
+  sec.style.display = SHOWCASE.length ? 'block' : 'none'
   if(SHOWCASE.length){
-    document.getElementById('showcase-section').style.display='block'
     document.getElementById('showcase-gallery').innerHTML=SHOWCASE.map(src=>
-      `<img class="gallery-img" src="${src}" onclick="previewImage('${src}')">`
+      `<img class="gallery-img" src="${escapeHtml(src)}" onclick="previewImage(this.src)">`
     ).join('')
   }
 }

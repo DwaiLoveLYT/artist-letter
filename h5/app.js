@@ -78,6 +78,18 @@ function fmtTime(ts){
   const d=new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
 }
+// 列表里写「今天 14:03」比「2026-10-04 14:03」有温度得多，也更好扫
+function fmtTimeHuman(ts){
+  if(!ts) return ''
+  const d=new Date(ts), now=new Date()
+  const dayStart=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime()
+  const diff=Math.round((dayStart(now)-dayStart(d))/86400000)
+  const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+  if(diff===0) return '今天 '+hm
+  if(diff===1) return '昨天 '+hm
+  if(diff>1 && diff<7) return diff+' 天前'
+  return `${d.getMonth()+1} 月 ${d.getDate()} 日`
+}
 
 // ==================== 存储 ====================
 const STORE_KEY='artist_letter_orders_v1'
@@ -109,6 +121,7 @@ let lastOrderId=''
 function goPage(name, param){
   if(name==='detail' && param){ renderDetail(param); lastOrderId=param }
   if(name==='track') renderTrack()
+  if(name==='order') restoreProfile()      // 回头客：自动带出上次填过的信息
 
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
   const page=document.getElementById('page-'+name)
@@ -135,6 +148,14 @@ function initHome(){
   }
 }
 
+// FAQ 手风琴：一次只开一条。5 条全展开会把首页拉成一页说明书。
+function toggleFaq(qEl){
+  const item=qEl.parentElement
+  const wasOpen=item.classList.contains('open')
+  document.querySelectorAll('#faq-list .faq-item').forEach(i=>i.classList.remove('open'))
+  if(!wasOpen) item.classList.add('open')
+}
+
 // ==================== 下单 ====================
 let letterSource='self'
 let addrLookup=false          // 客户勾了「帮我查最新地址」
@@ -159,6 +180,7 @@ function toggleAddrLookup(){
   const hint=document.getElementById('recipient-hint')
 
   box.classList.toggle('on',addrLookup)
+  box.setAttribute('aria-checked', addrLookup?'true':'false')
   sw.innerText=addrLookup?'✓':''
   req.style.display=addrLookup?'none':''
   ta.placeholder=addrLookup?RECIPIENT_PH_LOOKUP:RECIPIENT_PH_NORMAL
@@ -166,8 +188,39 @@ function toggleAddrLookup(){
     ? '已记下：这一单的地址由我帮你查，查到后会更新在「我的订单」'
     : '不知道精确地址就填城市或国家，我负责帮你查最新的'
 }
+// 这是个 div，键盘用户也得能操作
+function lookupKey(e){
+  if(e.key===' '||e.key==='Enter'||e.key==='Spacebar'){ e.preventDefault(); toggleAddrLookup() }
+}
+
+// ==================== 记住回头客 ====================
+// 称呼 / 手机号 / 回信地址，同一个人基本不变。第二次下单不该再填一遍。
+const PROFILE_KEY='artist_letter_profile_v1'
+function saveProfile(o){
+  try{
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      customer_name:o.customer_name||'', customer_phone:o.customer_phone||'', return_addr:o.return_addr||'',
+    }))
+  }catch(e){}
+}
+function restoreProfile(){
+  let p=null
+  try{ p=JSON.parse(localStorage.getItem(PROFILE_KEY)) }catch(e){}
+  const note=document.getElementById('prefill-note')
+  if(!p){ if(note) note.style.display='none'; return }
+  let hit=false
+  const fill=(id,v)=>{
+    const el=document.getElementById(id)
+    if(el && !el.value && v){ el.value=v; hit=true }
+  }
+  fill('o-name',p.customer_name); fill('o-phone',p.customer_phone); fill('o-return',p.return_addr)
+  if(note) note.style.display = hit ? 'block' : 'none'
+}
+
+let submitting=false
 
 function submitOrder(){
+  if(submitting) return                      // 防连点：手快双击会生成两单
   const artist=document.getElementById('o-artist').value.trim()
   const country=document.getElementById('o-country').value.trim()
   const recipient=document.getElementById('o-recipient').value.trim()
@@ -177,13 +230,16 @@ function submitOrder(){
     ? document.getElementById('o-note-proxy').value.trim()
     : document.getElementById('o-note-self').value.trim()
 
-  if(!artist){ toast('请填写艺人姓名'); return }
-  if(!country){ toast('请填写收信国家'); return }
-  if(!recipient && !addrLookup){ toast('请填写收信地址，或勾选「帮我查最新地址」'); return }
-  if(!phone){ toast('请填写手机号'); return }
-  if(!retAddr){ toast('请填写回信地址'); return }
-  if(letterSource==='proxy' && !note){ toast('选择代写时，请填写想说的话'); return }
+  // 提示写成「人话」+ 直接标出是哪一栏，别让客户在长表单里自己找
+  if(!artist){ fieldError('o-artist','还差一个艺人名字 —— 我得知道这封信寄给谁'); return }
+  if(!country){ fieldError('o-country','填一下收信国家，我才知道该备哪个国家的回信邮票'); return }
+  if(!recipient && !addrLookup){ fieldError('o-recipient','地址先空着也行 —— 勾上「帮我查最新地址」，我替你去查'); return }
+  if(!phone){ fieldError('o-phone','留个手机号吧，寄出前后有事好找你'); return }
+  if(!/^[\d\s+()\-]{6,}$/.test(phone)){ fieldError('o-phone','手机号看着不太对，再检查一下'); return }
+  if(!retAddr){ fieldError('o-return','回信地址还没填 —— 对方回信就寄到这里'); return }
+  if(letterSource==='proxy' && !note){ fieldError('o-note-proxy','选了代写，得先知道你想说什么'); return }
 
+  submitting=true
   const orderNo=makeOrderNo()
   const order={
     id:`${Date.now()}-${Math.floor(Math.random()*1e6)}`,
@@ -199,6 +255,7 @@ function submitOrder(){
   addOrder(order)
   lastOrderId=order.id
   const savedOK=lastSaveOK
+  saveProfile(order)                 // 下次下单自动带出称呼 / 手机 / 回信地址
 
   document.getElementById('s-order-no').innerText='订单号 '+orderNo
   document.getElementById('s-pay').innerHTML=payGuideHtml(order)
@@ -214,8 +271,8 @@ function submitOrder(){
   document.getElementById('o-note-self').value=''
   if(addrLookup) toggleAddrLookup()      // 复位地址代查开关
 
-  initHome() // 更新顶部统计
   goPage('success')
+  setTimeout(()=>{ submitting=false }, 1200)
   if(!savedOK) toast('本机无法保存订单，请截图订单号')
 }
 
@@ -236,6 +293,12 @@ function orderInfoText(o){
   ].join('\n')
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }
+// 截图要翻相册、还会被清；复制一下才是真能用的保存方式
+function copyOrderNo(){
+  const o=getOrder(lastOrderId)
+  if(!o){ toast('读不到订单号'); return }
+  copyText(o.order_no)
+}
 
 // 一键分享：直接唤起系统分享面板，选微信就发过去了，比「复制→切微信→粘贴」少三步
 async function shareOrderInfo(){
@@ -272,12 +335,25 @@ function payGuideHtml(o){
       <div class="pay-or"><span>然后扫码付款</span></div>
 
       <div class="qr-wrap">
-        <img class="qr-img" src="${PAY_QR}" alt="收款码" onclick="previewImage(this.src)">
+        <img class="qr-img" src="${PAY_QR}" alt="收款码" onclick="previewImage(this.src)" onerror="qrFail(this)">
         <div class="qr-tip">长按识别二维码付款<br>或保存图片 → 微信扫一扫 → 相册选图</div>
       </div>
 
       <button class="btn-ghost" onclick="copyReceipt('${o.id}')">复制「已转账」回执发给客服</button>
     </div>`
+}
+
+// 收款码是唯一的付款入口，图挂了就等于客户付不了款 —— 必须给条出路
+function qrFail(img){
+  img.style.display='none'
+  const box=img.parentElement
+  if(!box||box.querySelector('.qr-fail')) return
+  const tip=box.querySelector('.qr-tip')
+  if(tip) tip.style.display='none'
+  const d=document.createElement('div')
+  d.className='qr-fail'
+  d.innerHTML='收款码没能加载出来。<br>直接加客服 <b>'+wxId()+'</b> 要收款码，或下拉刷新重试。'
+  box.appendChild(d)
 }
 
 function copyReceipt(id){
@@ -308,14 +384,17 @@ function renderTrack(){
 
   if(!orders.length){ listEl.innerHTML=''; emptyEl.style.display='block'; return }
   emptyEl.style.display='none'
-  listEl.innerHTML=orders.map(o=>`
-    <div class="card" onclick="goPage('detail','${o.id}')" style="cursor:pointer;">
-      <div class="row"><div class="row-key">订单号</div><div class="row-val">${o.order_no}</div></div>
-      <div class="row"><div class="row-key">艺人</div><div class="row-val">${o.artist}</div></div>
+  listEl.innerHTML=orders.map(o=>{
+    const pending = o.addr_lookup && !String(o.recipient_addr||'').trim()
+    return `
+    <div class="card track-card" onclick="goPage('detail','${o.id}')">
+      <div class="row"><div class="row-key">订单号</div><div class="row-val">${escapeHtml(o.order_no)}</div></div>
+      <div class="row"><div class="row-key">艺人</div><div class="row-val">${escapeHtml(o.artist)}</div></div>
       <div class="row"><div class="row-key">状态</div><div class="row-val"><span class="${tagClass(o.status)}">${statusLabel(o.status)}</span></div></div>
-      <div class="row"><div class="row-key">下单时间</div><div class="row-val">${fmtTime(o.created_at)}</div></div>
-    </div>
-  `).join('')
+      <div class="row"><div class="row-key">下单</div><div class="row-val">${fmtTimeHuman(o.created_at)}</div></div>
+      ${pending?`<div class="track-pending">📍 地址我在查，查到会更新到这里，不用催</div>`:''}
+    </div>`
+  }).join('')
 }
 
 // ==================== 订单详情 ====================
@@ -332,9 +411,10 @@ function renderDetail(id){
 
   wrap.innerHTML=`
     <div class="hero" style="padding-bottom:10px;">
-      <div class="hero-title" style="font-size:22px;">寄给 ${o.artist}</div>
-      <div class="hero-sub">订单号 ${o.order_no} · ${fmtTime(o.created_at)}</div>
+      <div class="hero-title" style="font-size:22px;">寄给 ${escapeHtml(o.artist)}</div>
+      <div class="hero-sub">订单号 ${escapeHtml(o.order_no)} · ${fmtTime(o.created_at)}</div>
     </div>
+    <button class="btn-ghost" style="margin-bottom:14px;" onclick="copyOrderNo()">复制订单号</button>
     ${o.status==='created'?payGuideHtml(o):''}
     <div class="card">
       <div class="card-title">进度</div>
@@ -368,190 +448,18 @@ function renderDetail(id){
     `:''}
     <div class="card">
       <div class="card-title">订单信息</div>
-      <div class="row"><div class="row-key">艺人</div><div class="row-val">${o.artist}</div></div>
-      <div class="row"><div class="row-key">收信国家</div><div class="row-val">${o.country}</div></div>
-      <div class="row"><div class="row-key">收信地址</div><div class="row-val">${escapeHtml(o.recipient_addr)}</div></div>
+      <div class="row"><div class="row-key">艺人</div><div class="row-val">${escapeHtml(o.artist)}</div></div>
+      <div class="row"><div class="row-key">收信国家</div><div class="row-val">${escapeHtml(o.country)}</div></div>
+      <div class="row"><div class="row-key">收信地址</div><div class="row-val">${
+        String(o.recipient_addr||'').trim() ? escapeHtml(o.recipient_addr)
+        : (o.addr_lookup ? '<span style="color:#EF9F27;">待查 · 我查到后更新</span>' : '—')
+      }</div></div>
       <div class="row"><div class="row-key">回信地址</div><div class="row-val">${escapeHtml(o.return_addr)}</div></div>
       <div class="row"><div class="row-key">付款</div><div class="row-val">${o.pay_status==='paid'?'已确认收款':'待付款'}</div></div>
       <div class="row"><div class="row-key">信的来源</div><div class="row-val">${o.letter_source==='proxy'?'需要代写':'自己手写'}</div></div>
       ${o.letter_note?`<div class="row"><div class="row-key">内容备注</div><div class="row-val">${escapeHtml(o.letter_note)}</div></div>`:''}
     </div>
   `
-}
-
-// ==================== 管理台账 ====================
-let adminFilterKey='all'
-const FIELD_MAP={
-  订单号:'order_no', 艺人:'artist', 收信国家:'country', 收信地址:'recipient_addr',
-  我的称呼:'customer_name', 手机号:'customer_phone', 回信地址:'return_addr', 备注:'letter_note'
-}
-function parseOrderText(text){
-  const order={}
-  text.split('\n').forEach(line=>{
-    const m=/^\s*(.+?)\s*[:：]\s*(.*)\s*$/.exec(line)
-    if(!m)return
-    const key=m[1].replace(/^【|】$/g,'').trim()
-    const val=m[2].trim()
-    if(FIELD_MAP[key])order[FIELD_MAP[key]]=val
-    if(key==='信的来源')order.letter_source=val.indexOf('代写')>=0?'proxy':'self'
-  })
-  return order
-}
-function adminFilter(el){ adminFilterKey=el.dataset.filter; document.querySelectorAll('#page-admin .chip').forEach(c=>c.classList.remove('on')); el.classList.add('on'); renderAdmin() }
-function adminSearch(){ renderAdmin() }
-
-function adminReconcile(){
-  const tail = document.getElementById('a-reconcile').value.trim().toUpperCase()
-  const resultEl = document.getElementById('reconcile-result')
-  if(!tail || tail.length !== 4){
-    resultEl.innerHTML = '<div style="color:#EF9F27; font-size:13px;">请输入 4 位字母/数字</div>'
-    return
-  }
-  const orders = allOrders().filter(o => {
-    const no = (o.order_no || '').toUpperCase()
-    return no.slice(-4) === tail
-  })
-  if(!orders.length){
-    resultEl.innerHTML = '<div style="color:#EF9F27; font-size:13px;">没有找到匹配的订单，可能客户还没发给我</div>'
-    return
-  }
-  const o = orders[0]
-  const isPaid = o.pay_status === 'paid'
-  resultEl.innerHTML = `
-    <div class="card" style="margin-top:10px; margin-bottom:0;">
-      <div class="row"><div class="row-key">订单号</div><div class="row-val">${o.order_no}</div></div>
-      <div class="row"><div class="row-key">艺人</div><div class="row-val">${o.artist}</div></div>
-      <div class="row"><div class="row-key">付款状态</div><div class="row-val" style="color:${isPaid?'#5DCAA5':'#EF9F27'}">${isPaid?'已收款':'待付款'}</div></div>
-      ${!isPaid ? `<button class="btn" style="margin-top:8px; margin-bottom:0;" onclick="adminMarkPaid('${o.id}'); document.getElementById('reconcile-result').innerHTML=''; document.getElementById('a-reconcile').value=''; toast('已标记收款'); renderAdmin();">✓ 标记这笔已收款</button>` : '<div class="tiny" style="margin-top:8px; color:#5DCAA5;">这笔已经标记过了</div>'}
-    </div>
-  `
-}
-
-function renderAdmin(){
-  const word=(document.getElementById('a-keyword').value||'').trim().toUpperCase()
-  let orders=allOrders().sort((a,b)=>(b.created_at||0)-(a.created_at||0))
-
-  document.getElementById('a-stat-unpaid').innerText=orders.filter(o=>o.pay_status!=='paid').length
-  document.getElementById('a-stat-draw').innerText=orders.filter(o=>o.status==='drawing').length
-  document.getElementById('a-stat-mail').innerText=orders.filter(o=>o.status==='mailed').length
-
-  if(adminFilterKey!=='all') orders=orders.filter(o=>o.status===adminFilterKey)
-  if(word) orders=orders.filter(o=>{
-    const no=(o.order_no||'').toUpperCase(),art=(o.artist||'').toUpperCase(),ph=o.customer_phone||''
-    return no.slice(-4)===word||no.indexOf(word)>=0||art.indexOf(word)>=0||ph.indexOf(word)>=0
-  })
-
-  const listEl=document.getElementById('admin-list')
-  const emptyEl=document.getElementById('admin-empty')
-  if(!orders.length){ listEl.innerHTML=''; emptyEl.style.display='block'; return }
-  emptyEl.style.display='none'
-
-  listEl.innerHTML=orders.map(o=>`
-    <div class="card">
-      <div class="row"><div class="row-key">订单号</div><div class="row-val">${o.order_no}</div></div>
-      <div class="row"><div class="row-key">艺人</div><div class="row-val">${o.artist}</div></div>
-      <div class="row"><div class="row-key">状态</div><div class="row-val"><span class="${tagClass(o.status)}">${statusLabel(o.status)}</span></div></div>
-      <div class="row"><div class="row-key">付款</div><div class="row-val">${o.pay_status==='paid'?'已收款':'待付款'}</div></div>
-      <div class="row"><div class="row-key">电话</div><div class="row-val">${o.customer_phone}</div></div>
-      <div class="addr">收信：${escapeHtml(o.recipient_addr)}</div>
-      <div class="addr">回信：${escapeHtml(o.return_addr)}</div>
-      ${o.letter_note?`<div class="addr">备注：${escapeHtml(o.letter_note)}</div>`:''}
-      <div class="ops">
-        ${o.pay_status!=='paid'?`<button class="op" onclick="adminMarkPaid('${o.id}')">标记已付</button>`:''}
-        <button class="op" onclick="adminChangeStatus('${o.id}')">改状态</button>
-        <button class="op" onclick="adminAttachImage('${o.id}')">存图</button>
-        <button class="op" onclick="adminAttachVideo('${o.id}')">存视频</button>
-        <button class="op" onclick="adminNote('${o.id}')">写备注</button>
-        <button class="op" onclick="goPage('detail','${o.id}')">查看</button>
-        <button class="op" onclick="adminDel('${o.id}')">删除</button>
-      </div>
-    </div>
-  `).join('')
-}
-
-function adminPaste(){
-  const text=prompt('把客户发来的下单信息整段粘进来：')
-  if(!text)return
-  const parsed=parseOrderText(text)
-  if(!parsed.artist && !parsed.order_no){ toast('没解析出内容，请检查格式'); return }
-  addOrder({
-    id:`${Date.now()}-${Math.floor(Math.random()*1e6)}`,
-    order_no:parsed.order_no||makeOrderNo(),
-    artist:parsed.artist||'（未填）',
-    country:parsed.country||'', recipient_addr:parsed.recipient_addr||'',
-    customer_name:parsed.customer_name||'', customer_phone:parsed.customer_phone||'',
-    return_addr:parsed.return_addr||'', letter_source:parsed.letter_source||'self',
-    letter_note:parsed.letter_note||'', status:'created', pay_status:'unpaid',
-    admin_note:'', media:[], created_at:Date.now(),
-  })
-  initHome()
-  toast('已入台账'); renderAdmin()
-}
-function adminMarkPaid(id){
-  const o=getOrder(id)
-  const next=o&&o.status==='created'?'paid':(o?o.status:'paid')
-  updOrder(id,{pay_status:'paid',status:next})
-  toast('已标记收款'); renderAdmin()
-}
-function adminChangeStatus(id){
-  const labels=STATUS_FLOW.map(s=>s.label)
-  const idx=prompt('选择新状态（输入数字 0-4）：\n'+labels.map((l,i)=>`${i}.${l}`).join('\n'))
-  if(idx===null)return
-  const n=parseInt(idx,10)
-  if(isNaN(n)||n<0||n>=STATUS_FLOW.length){ toast('无效选择'); return }
-  updOrder(id,{status:STATUS_FLOW[n].key})
-  toast('已更新'); renderAdmin()
-}
-function adminNote(id){
-  const o=getOrder(id)
-  const text=prompt('给客户的留言：',o.admin_note||'')
-  if(text===null)return
-  updOrder(id,{admin_note:text.trim()})
-  toast('已保存')
-}
-function adminDel(id){
-  if(!confirm('从这台手机删除这条订单？不可恢复。'))return
-  delOrder(id); initHome(); renderAdmin()
-}
-function adminExport(){
-  const text=allOrders().map(o=>[
-    `订单号：${o.order_no}`,`艺人：${o.artist}`,`状态：${statusLabel(o.status)}`,
-    `付款：${o.pay_status==='paid'?'已收':'待收'}`,`电话：${o.customer_phone||'-'}`,
-    `备注：${o.admin_note||'-'}`,
-  ].join('\n')).join('\n\n')
-  if(!text){ toast('台账还是空的'); return }
-  copyText(text)
-}
-function adminAttachImage(id){
-  createFileInput('image/*',files=>{
-    for(const file of files){
-      const url=URL.createObjectURL(file)
-      const o=getOrder(id)
-      const media=Array.isArray(o.media)?o.media:[]
-      media.push({kind:'image',path:url,at:Date.now()})
-      updOrder(id,{media})
-    }
-    toast('图片已保存'); renderAdmin()
-  })
-}
-function adminAttachVideo(id){
-  createFileInput('video/*',files=>{
-    for(const file of files){
-      if(file.size>60*1024*1024){ toast('视频超过60MB，请压缩后重试'); continue }
-      const url=URL.createObjectURL(file)
-      const o=getOrder(id)
-      const media=Array.isArray(o.media)?o.media:[]
-      media.push({kind:'video',path:url,at:Date.now()})
-      updOrder(id,{media})
-    }
-    toast('视频已保存'); renderAdmin()
-  })
-}
-function createFileInput(accept,cb){
-  const input=document.createElement('input')
-  input.type='file'; input.accept=accept; input.multiple=true; input.style.display='none'
-  input.onchange=e=>{ cb(Array.from(e.target.files)); document.body.removeChild(input) }
-  document.body.appendChild(input); input.click()
 }
 
 // ==================== 工具 ====================
@@ -575,13 +483,33 @@ function previewImage(src){
   div.onclick=()=>document.body.removeChild(div)
   document.body.appendChild(div)
 }
+let toastTimer=null
 function toast(msg){
   let el=document.getElementById('toast')
   if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el) }
   el.innerText=msg; el.style.display='block'
-  setTimeout(()=>el.style.display='none',2000)
+  // 连续弹两条时，前一条的定时器会把后一条提前关掉 —— 必须清掉重计
+  clearTimeout(toastTimer)
+  toastTimer=setTimeout(()=>el.style.display='none',2200)
 }
-function escapeHtml(str){ return str?str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'' }
+
+function escapeHtml(str){
+  if(str===null||str===undefined) return ''
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+}
+
+// 校验失败时把出错那一栏直接标出来并滚过去。
+// 只弹一句 toast 的话，长表单里客户根本不知道是哪一项没填。
+function fieldError(id, msg){
+  toast(msg)
+  const el=document.getElementById(id)
+  if(!el) return
+  el.classList.add('field-error')
+  el.scrollIntoView({behavior:'smooth', block:'center'})
+  setTimeout(()=>el.classList.remove('field-error'), 2400)
+}
 
 // ==================== 启动 ====================
 window.addEventListener('DOMContentLoaded',()=>{ initHome(); goPage('home') })

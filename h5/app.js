@@ -163,6 +163,18 @@ function orderInfoText(o){
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }
 
+// 一键分享：直接唤起系统分享面板，选微信就发过去了，比「复制→切微信→粘贴」少三步
+async function shareOrderInfo(){
+  const o=getOrder(lastOrderId)
+  if(!o){ toast('读不到订单信息'); return }
+  const text=orderInfoText(o)
+  if(navigator.share){
+    try { await navigator.share({ title:'艺人代寄 · 下单信息', text }); return }
+    catch(e){ if(e && e.name==='AbortError') return }   // 用户自己取消了，不兜底
+  }
+  copyText(text)                                        // 不支持分享的浏览器：退回复制
+}
+
 // ==================== 付款引导卡 ====================
 // 核心：把订单号后 4 位钉进客户的转账动作里。
 // 客户填了备注，钱一到账就能直接对上单，不用来回问「你是谁」。

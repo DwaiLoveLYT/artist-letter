@@ -16,20 +16,41 @@ body {
 .page.active { display:block; }
 @keyframes fadeIn { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
 
-/* ==================== 顶部信任条 ==================== */
+/* ==================== 顶部条（吸顶 + 常驻订单入口） ==================== */
 .trust-bar {
-  background:#141413;
-  padding:10px 14px; display:flex; align-items:center; justify-content:center;
-  gap:6px; font-size:12px; color:#6a6a62;
-  border-bottom:1px solid rgba(255,255,255,0.04);
+  position:sticky; top:0; z-index:30;
+  background:rgba(20,20,19,0.94);
+  -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  padding:10px 14px; display:flex; align-items:center; justify-content:space-between;
+  gap:10px; font-size:12px; color:#6a6a62;
+  border-bottom:1px solid rgba(255,255,255,0.055);
   letter-spacing:0.3px;
 }
 .trust-location {
   color:#8a9a8f; font-weight:500;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .trust-dot {
   color:#3a3a38; font-size:10px;
 }
+.trust-link {
+  flex-shrink:0; cursor:pointer;
+  color:#8a9a8f; font-size:12.5px; font-weight:500;
+  padding:5px 11px; border-radius:999px;
+  background:rgba(138,154,143,0.1);
+  border:1px solid rgba(138,154,143,0.22);
+  white-space:nowrap; transition:background .15s ease;
+}
+.trust-link:active { background:rgba(138,154,143,0.24); }
+
+/* 订单号保存提示 */
+.save-tip {
+  text-align:center; font-size:12px; color:#7d7d75;
+  background:rgba(255,255,255,0.035);
+  border-radius:10px; padding:10px 13px; margin:0 0 16px;
+  line-height:1.6;
+}
+.save-tip b { color:#a5a49f; }
 
 /* ==================== 导航 ==================== */
 .nav-bar {

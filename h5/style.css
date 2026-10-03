@@ -62,6 +62,15 @@ body {
 }
 .save-tip-warn b { color:#e8c48f; }
 
+/* 云端已收到 —— 只有服务端明确回成功才出现。
+   文案必须让客户明白「这一单真的不用再发」，否则等于白同步一次。 */
+.cloud-ok {
+  margin-top:12px; padding:9px 12px; border-radius:9px;
+  font-size:12.5px; line-height:1.6; color:#9fd8c0;
+  background:rgba(93,202,165,0.1);
+  border:1px solid rgba(93,202,165,0.28);
+}
+
 /* 付款卡里的第 ② 步：把订单信息发我。
    放在付款卡内部（而不是另起一张卡）—— 客户付完款就往下滑，
    同一张卡里就不会漏；漏了就等于我收了钱不知道是谁的单。 */

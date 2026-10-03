@@ -1149,11 +1149,16 @@ function doExport(){
 function pickImport(){
   openSheet(`
     <div class="sh-title">导入备份</div>
-    <div class="sh-sub">选择之前导出的 JSON 文件。<br><b style="color:#EF9F27">会覆盖当前台账</b>，导入前建议先导出一次。</div>
+    <div class="sh-sub">选择之前导出的 JSON 文件。<br><b style="color:#EF9F27">会覆盖当前台账</b>，选完文件后我会先让你确认一次。</div>
     <button class="sh-opt" onclick="doImport()">📥 选择备份文件</button>
     <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">取消</button>
   `)
 }
+// 导入是**破坏性操作**（直接覆盖台账），而且原来选完文件立刻生效、没有二次确认。
+// 选错一个旧备份 → 新单静默消失，跟「丢单」是同一类事故。
+// 所以改成：先读文件、把「会丢哪几单」摆出来，确认了才写。
+let pendingImport = null
+
 function doImport(){
   closeSheet()
   const input = document.createElement('input')
@@ -1166,13 +1171,45 @@ function doImport(){
         const data = JSON.parse(ev.target.result)
         const orders = Array.isArray(data) ? data : data.orders
         if(!Array.isArray(orders)) throw new Error('格式不对')
-        saveOrders(orders); renderList(); toast('已导入 ' + orders.length + ' 单')
+        sheetImportConfirm(orders)      // 先确认，不直接覆盖
       } catch(err){ toast('文件读不出来，确认是导出的备份吗') }
     }
     reader.readAsText(f)
     document.body.removeChild(input)
   }
   document.body.appendChild(input); input.click()
+}
+
+function sheetImportConfirm(orders){
+  const cur = allOrders()
+  const inFile = {}
+  orders.forEach(o => { if(o && o.order_no) inFile[o.order_no] = true })
+  const lost = cur.filter(o => !inFile[o.order_no])
+  pendingImport = orders
+
+  const lostHtml = lost.length
+    ? `<div class="imp-warn">
+         ⚠️ 有 <b>${lost.length} 单</b>不在这个备份里，导入后会消失：<br>
+         ${lost.slice(0,5).map(o => esc(o.order_no)).join('、')}${lost.length > 5 ? ' 等' : ''}<br>
+         <span class="imp-warn-tip">建议先「导出备份」，再导入。</span>
+       </div>`
+    : `<div class="imp-ok">当前台账的单都在这个备份里，导入不会丢东西。</div>`
+
+  openSheet(`
+    <div class="sh-title">导入备份</div>
+    <div class="sh-sub">备份里 <b>${orders.length} 单</b>，当前台账 <b>${cur.length} 单</b>。<br>
+      <b style="color:#EF9F27">导入会覆盖当前台账</b>。</div>
+    ${lostHtml}
+    <button class="sh-opt danger" onclick="doImportConfirm()">确认导入（覆盖）</button>
+    <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">取消</button>
+  `)
+}
+
+function doImportConfirm(){
+  if(!pendingImport) return
+  const n = pendingImport.length
+  saveOrders(pendingImport); pendingImport = null
+  closeSheet(); renderList(); toast('已导入 ' + n + ' 单')
 }
 
 // ==================== 设置 ====================

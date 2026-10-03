@@ -87,10 +87,15 @@ body {
 }
 .hero-cta { display:flex; flex-direction:column; gap:10px; }
 /* 主视觉实拍图：默认 display:none —— 没图时不留空框，也不会闪一下白块。
-   有图时由 initHero() 打开。图要够大，它才是这一屏的视线锚点。 */
+   有图时由 initHero() 打开。图要够大，它才是这一屏的视线锚点。
+   固定 4:3 画框 + object-fit:cover：
+   ① 图没加载完也占着位置，标题不会在图片到位时往下跳（消除布局抖动）；
+   ② 不管 DWAY 发来什么比例的实拍图，主视觉高度都一致。 */
 .hero-figure { display:none; margin:0 auto 22px; max-width:360px; }
 .hero-figure-img {
-  width:100%; display:block; border-radius:16px; cursor:pointer;
+  width:100%; aspect-ratio:4 / 3; object-fit:cover;
+  display:block; border-radius:16px; cursor:pointer;
+  background:rgba(255,255,255,0.04);
   box-shadow:0 14px 36px rgba(0,0,0,0.5);
 }
 

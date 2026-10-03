@@ -314,9 +314,16 @@ function orderInfoText(o){
     `回信地址：${o.return_addr}`,
     `信的来源：${o.letter_source==='proxy'?'需要代写':'自己手写'}`,
     `备注：${o.letter_note||'（无）'}`,
+    // 客户上午下单、我晚上才把这段补进台账，没有这一行，这单就会显示成「刚下的」，
+    // 待办排序和「多久没动」全都跟着错。
+    `下单时间：${stampText(o.created_at)}`,
     // 不能写「已付」——客户可能在付款前就点了分享，那时钱还没到账
     `订单金额：¥190`,
   ].join('\n')
+}
+function stampText(ts){
+  const d = new Date(ts || Date.now()), p = n => String(n).padStart(2,'0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }
 // 截图要翻相册、还会被清；复制一下才是真能用的保存方式

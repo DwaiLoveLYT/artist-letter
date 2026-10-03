@@ -251,6 +251,8 @@ body {
   border-radius:10px; padding:12px 14px; font-size:15px; color:#f5f5f0;
   width:100%; outline:none; -webkit-appearance:none;
   transition:border-color 0.2s;
+  /* 校验失败会把这个字段滚到顶部；留出吸顶导航栏的高度，别被压住 */
+  scroll-margin-top:70px;
 }
 .input:focus, .textarea:focus { border-color:rgba(93,202,165,0.4); }
 .textarea { height:90px; resize:none; line-height:1.5; }

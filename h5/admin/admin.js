@@ -713,7 +713,8 @@ function parseOrderText(text){
     const val = m[2].trim()
     if(FIELD_MAP[key]) o[FIELD_MAP[key]] = dePlaceholder(val)
     if(key === '信的来源') o.letter_source = val.indexOf('代写') >= 0 ? 'proxy' : 'self'
-    if(key === '地址代查') o.addr_lookup = val.indexOf('需要') >= 0
+    // 注意：「不需要」里含「需要」，必须先排掉否定式，否则非代查单会被误判成代查单
+    if(key === '地址代查') o.addr_lookup = val.indexOf('不需要') < 0 && val.indexOf('需要') >= 0
   })
   return o
 }

@@ -347,6 +347,49 @@ body {
 .pay-card .qr-wrap { margin:0 0 14px; }
 .pay-card .qr-img { width:180px; height:180px; }
 
+/* ==================== 客服联系 ==================== */
+.contact-card { padding:18px; }
+.contact-row {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:13px 14px; border-radius:12px; margin-bottom:9px;
+  background:#141413; border:1px solid rgba(255,255,255,0.06);
+  transition:border-color .15s ease, background .15s ease;
+}
+.contact-row.today {
+  background:rgba(93,202,165,0.07);
+  border-color:rgba(93,202,165,0.3);
+}
+.contact-left { min-width:0; flex:1; }
+.contact-when {
+  display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+  font-size:12px; color:#6a6a62; margin-bottom:4px;
+}
+.contact-row.today .contact-when { color:#8a9a8f; }
+.contact-today {
+  font-size:10.5px; font-weight:600; letter-spacing:.4px;
+  color:#0d0d0c; background:#5DCAA5; padding:2px 7px; border-radius:999px;
+}
+.contact-id {
+  font-size:18px; font-weight:600; color:#f5f5f0;
+  letter-spacing:.5px; line-height:1.3; word-break:break-all;
+}
+.contact-row.today .contact-id { color:#5DCAA5; }
+.contact-copy {
+  flex-shrink:0; font-size:13px; padding:9px 16px; border-radius:9px;
+  background:rgba(255,255,255,0.07); color:#c8c7c2;
+  border:none; -webkit-appearance:none; cursor:pointer;
+}
+.contact-row.today .contact-copy {
+  background:linear-gradient(135deg,#2C4A3B 0%,#3d6b52 100%);
+  color:#f5f5f0; font-weight:600;
+}
+.contact-copy:active { opacity:.8; }
+.contact-note {
+  font-size:12px; color:#6a6a62; line-height:1.65;
+  margin-top:13px; padding-top:13px;
+  border-top:1px solid rgba(255,255,255,0.05);
+}
+
 /* ==================== 空状态 ==================== */
 .empty-state { text-align:center; padding:48px 20px; }
 .empty-icon { font-size:40px; margin-bottom:12px; }

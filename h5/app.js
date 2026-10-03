@@ -129,8 +129,7 @@ function submitOrder(){
   const savedOK=lastSaveOK
 
   document.getElementById('s-order-no').innerText='订单号 '+orderNo
-  document.getElementById('s-tail').innerText=orderNo.slice(-4)
-  document.getElementById('s-tail2').innerText=orderNo.slice(-4)
+  document.getElementById('s-pay').innerHTML=payGuideHtml(order)
 
   // 清空
   document.getElementById('o-artist').value=''
@@ -163,6 +162,48 @@ function orderInfoText(o){
   ].join('\n')
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }
+
+// ==================== 付款引导卡 ====================
+// 核心：把订单号后 4 位钉进客户的转账动作里。
+// 客户填了备注，钱一到账就能直接对上单，不用来回问「你是谁」。
+function payGuideHtml(o){
+  const t = o.order_no.slice(-4)
+  return `
+    <div class="card pay-card">
+      <div class="pay-card-top">
+        <span class="pay-card-step">最后一步 · 付款</span>
+        <span class="pay-card-amt">¥190</span>
+      </div>
+
+      <div class="pay-tail-block">
+        <div class="pay-tail-label">转账 / 付款时，备注里填这 4 位</div>
+        <div class="pay-tail">${t}</div>
+        <button class="btn btn-large pay-tail-btn" onclick="copyText('${t}')">复制这 4 位</button>
+      </div>
+
+      <div class="pay-why">填上这 4 位，我一看到账就知道是你的单，不用再来回问你订单号。</div>
+
+      <div class="pay-or"><span>然后扫码付款</span></div>
+
+      <div class="qr-wrap">
+        <img class="qr-img" src="${PAY_QR}" alt="收款码" onclick="previewImage(this.src)">
+        <div class="qr-tip">长按识别二维码付款<br>或保存图片 → 微信扫一扫 → 相册选图</div>
+      </div>
+
+      <button class="btn-ghost" onclick="copyReceipt('${o.id}')">复制「已转账」回执发给客服</button>
+    </div>`
+}
+
+function copyReceipt(id){
+  const o=getOrder(id)
+  if(!o){ toast('读不到订单信息'); return }
+  copyText([
+    '【已转账】',
+    `订单号：${o.order_no}`,
+    '金额：¥190',
+    `转账备注：${o.order_no.slice(-4)}`,
+  ].join('\n'))
+}
 
 // ==================== 我的订单 ====================
 function renderTrack(){
@@ -208,7 +249,7 @@ function renderDetail(id){
       <div class="hero-title" style="font-size:22px;">寄给 ${o.artist}</div>
       <div class="hero-sub">订单号 ${o.order_no} · ${fmtTime(o.created_at)}</div>
     </div>
-    ${o.status==='created'?'<div class="notice">等待收款确认。转账后请稍候，我确认后会立刻推进。</div>':''}
+    ${o.status==='created'?payGuideHtml(o):''}
     <div class="card">
       <div class="card-title">进度</div>
       <div class="steps">

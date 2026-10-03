@@ -333,6 +333,7 @@ function saveNewOrder(){
 
 // ==================== 筛选 / 列表 ====================
 let filterKey = 'all'
+const openIds = new Set()   // 记住哪些订单卡是展开的，重渲染后不塌回去
 const CHIPS = [
   { f:'all',     label:'全部' },
   { f:'unpaid',  label:'待收款' },
@@ -385,7 +386,7 @@ function renderList(){
 
   if(!list.length){
     box.innerHTML = ''
-    empty.style.display = allOrders().length ? 'block' : 'block'
+    empty.style.display = 'block'
     empty.querySelector('.empty-title').innerText = allOrders().length ? '没有匹配的订单' : '台账还是空的'
     empty.querySelector('.empty-sub').innerText   = allOrders().length ? '换个筛选条件，或清空搜索词' : '客户发来下单信息后，点上面的「新建订单」粘进来'
     return
@@ -401,7 +402,7 @@ function orderCard(o){
   const logs  = Array.isArray(o.logs)  ? o.logs  : []
 
   return `
-  <div class="order ${cls}" id="od-${o.id}">
+  <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''}" id="od-${o.id}">
     <div class="o-top" onclick="toggle('${o.id}')">
       <div>
         <div class="o-no">${esc(tail(o.order_no))}<small>${esc(o.order_no)}</small></div>
@@ -452,7 +453,12 @@ function orderCard(o){
   </div>`
 }
 
-function toggle(id){ document.getElementById('od-' + id).classList.toggle('open') }
+function toggle(id){
+  const el = document.getElementById('od-' + id)
+  if(!el) return
+  el.classList.toggle('open')
+  el.classList.contains('open') ? openIds.add(id) : openIds.delete(id)
+}
 
 // ==================== 订单操作 ====================
 function markPaid(id, fromRecon){

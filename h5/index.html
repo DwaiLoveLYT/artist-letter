@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="艺人代寄 — 一对一欧美艺人国际信件代寄服务，全手绘信封，含投递视频凭证。">
+<title>艺人代寄 — 把你的信，寄到他手上</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+<!-- ==================== 顶部信任条 ==================== -->
+<div class="trust-bar">
+  <span class="trust-location">📍 深圳寄出</span>
+  <span class="trust-dot">·</span>
+  <span>原创手绘设计</span>
+  <span class="trust-dot">·</span>
+  <span>投递视频凭证</span>
+</div>
+
+<!-- ==================== 首页 ==================== -->
+<section class="page active" id="page-home">
+  <div class="hero-section">
+    <div class="hero-badge">HAND-PAINTED ENVELOPES</div>
+    <h1 class="hero-title">把你的信<br>寄到他手上</h1>
+    <p class="hero-sub">一对一欧美艺人代寄 · 全手绘信封 · 投递视频凭证</p>
+    <div class="hero-cta">
+      <button class="btn btn-large" onclick="goPage('order')">立即下单 ¥190</button>
+      <button class="btn-ghost btn-large" onclick="scrollToHow()">了解流程</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- 信任背书 -->
+    <div class="trust-grid">
+      <div class="trust-item">
+        <div class="trust-icon">✉️</div>
+        <div class="trust-label">手绘信封 ×2</div>
+        <div class="trust-desc">寄出信封 + 回信信封</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-icon">🎫</div>
+        <div class="trust-label">邮票全包</div>
+        <div class="trust-desc">中国寄出 + 目的国回信邮票</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-icon">🎥</div>
+        <div class="trust-label">投递视频</div>
+        <div class="trust-desc">一镜到底，不可伪造</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-icon">📍</div>
+        <div class="trust-label">地址代查</div>
+        <div class="trust-desc">不知道地址？我帮你找</div>
+      </div>
+    </div>
+
+    <!-- 价格 -->
+    <div class="price-card">
+      <div class="price-header">
+        <span class="price-label">一单全包价</span>
+        <span class="price-tag">无隐形费用</span>
+      </div>
+      <div class="price-body">
+        <span class="price-currency">¥</span>
+        <span class="price-number">190</span>
+        <span class="price-unit">/ 单</span>
+      </div>
+      <div class="price-includes">
+        <div class="include-row"><span class="check">✓</span> 手绘信封 ×2（寄出 + 回信）</div>
+        <div class="include-row"><span class="check">✓</span> 邮票 ×2（中国寄出 + 目的国回信）</div>
+        <div class="include-row"><span class="check">✓</span> 收信地址英文翻译与排版</div>
+        <div class="include-row"><span class="check">✓</span> 投递视频凭证</div>
+        <div class="include-row"><span class="check">✓</span> 全程进度可查</div>
+      </div>
+      <div class="price-note">
+        <span class="warning">⚠</span> 我只负责寄送，不保证艺人回信。手绘信封的意义是提高「被拆开」的概率。
+      </div>
+    </div>
+
+    <!-- 作品墙 -->
+    <div class="section" id="showcase-section" style="display:none;">
+      <div class="section-header">
+        <h2 class="section-title">手绘作品</h2>
+        <span class="section-more">每一封都是孤品</span>
+      </div>
+      <div class="gallery" id="showcase-gallery"></div>
+    </div>
+
+    <!-- 流程 -->
+    <div class="section" id="how-section">
+      <div class="section-header">
+        <h2 class="section-title">服务流程</h2>
+        <span class="section-more">五步完成</span>
+      </div>
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-num">01</div>
+          <div class="timeline-body">
+            <div class="timeline-title">提交订单</div>
+            <div class="timeline-desc">填写艺人姓名、收信地址、你的回信地址。不知道精确地址？填城市就行，我负责查最新的。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-num">02</div>
+          <div class="timeline-body">
+            <div class="timeline-title">付款确认</div>
+            <div class="timeline-desc">扫码付 ¥190，备注订单号后 4 位。确认收款后才安排画师，绝不提前收费。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-num">03</div>
+          <div class="timeline-body">
+            <div class="timeline-title">画师绘制</div>
+            <div class="timeline-desc">两个手绘信封制作完成，成品图先发给你确认。不满意可沟通修改一次。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-num">04</div>
+          <div class="timeline-body">
+            <div class="timeline-title">贴票投递</div>
+            <div class="timeline-desc">贴好中国邮票与国际邮票，录制一镜到底投递视频，证明确实寄出。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-num">05</div>
+          <div class="timeline-body">
+            <div class="timeline-title">等待回音</div>
+            <div class="timeline-desc">国际平信 4–8 周。无退回通常表示已送达艺人团队。之后就是等待。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 常见问题 -->
+    <div class="section">
+      <div class="section-header">
+        <h2 class="section-title">常见问题</h2>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">能保证收到回信吗？</div>
+          <div class="faq-a">不能。我提供的是「寄送服务」，不是「回信保证」。我能做的是：手绘信封提高被注意的概率，贴好回信邮票降低对方回信的成本。</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">为什么不用挂号信？</div>
+          <div class="faq-a">挂号信需要收件人本人签收。艺人本人不会自己收信，大概率被助理拒收。平信反而是更稳的选择。</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">怎么证明你真的寄了？</div>
+          <div class="faq-a">每笔订单附一镜到底投递视频，从信封正面到投进邮筒全程不剪辑。这是目前最强的不可伪造凭证。</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">付款后多久能画好？</div>
+          <div class="faq-a">确认收款后一周内出图（含设计构思 + 手绘绘制）。出图后先发你确认，不满意可沟通修改一次。有进展会随时更新在「我的订单」。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部 CTA -->
+    <div class="bottom-cta">
+      <div class="bottom-cta-title">准备好了吗？</div>
+      <div class="bottom-cta-desc">填写信息 → 付款 → 等图 → 寄出。全程可查。</div>
+      <button class="btn btn-large" onclick="goPage('order')">立即下单 ¥190</button>
+      <div class="bottom-cta-contact">
+        有疑问？加微信 <b>IMDWAY</b> 咨询
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 下单 ==================== -->
+<section class="page" id="page-order">
+  <div class="nav-bar">
+    <button class="nav-back" onclick="goPage('home')">←</button>
+    <span>填写订单</span>
+  </div>
+  <div class="wrap">
+    <div class="form-progress">
+      <div class="form-progress-step active">填信息</div>
+      <div class="form-progress-line"></div>
+      <div class="form-progress-step">付款</div>
+      <div class="form-progress-line"></div>
+      <div class="form-progress-step">完成</div>
+    </div>
+
+    <div class="card form-card">
+      <div class="form-section-title">收件信息</div>
+      <div class="field">
+        <label class="label">艺人姓名 <span class="req">*</span></label>
+        <input class="input" id="o-artist" placeholder="例如 Johnny Depp / Tom Holland">
+        <div class="field-hint">不知道地址没关系，我帮你查</div>
+      </div>
+      <div class="field">
+        <label class="label">收信国家 / 地区 <span class="req">*</span></label>
+        <input class="input" id="o-country" placeholder="例如 United States / United Kingdom">
+        <div class="field-hint">决定我采购哪个国家的回信邮票</div>
+      </div>
+      <div class="field">
+        <label class="label">收信地址（英文，越准越好）<span class="req">*</span></label>
+        <textarea class="textarea" id="o-recipient" placeholder="艺人工作室 / 经纪公司 / Fan mail 地址&#10;不知道精确地址就填城市或国家，我负责帮你查最新的" maxlength="500"></textarea>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <div class="form-section-title">回信信息</div>
+      <div class="field">
+        <label class="label">你的称呼</label>
+        <input class="input" id="o-name" placeholder="回信信封上写谁的名字">
+      </div>
+      <div class="field">
+        <label class="label">手机号 <span class="req">*</span></label>
+        <input class="input" id="o-phone" type="tel" placeholder="用于寄出前后的联系" maxlength="20">
+      </div>
+      <div class="field">
+        <label class="label">回信地址（中文，完整）<span class="req">*</span></label>
+        <textarea class="textarea" id="o-return" placeholder="省 / 市 / 区 / 街道门牌 / 邮编&#10;我会翻译成英文印在回信信封上" maxlength="300"></textarea>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <div class="form-section-title">信件</div>
+      <div class="radio-row">
+        <div class="radio on" data-value="self" onclick="setLetterSource(this)">
+          <div class="radio-title">自己手写</div>
+          <div class="radio-desc">写好寄给我，我来打包</div>
+        </div>
+        <div class="radio" data-value="proxy" onclick="setLetterSource(this)">
+          <div class="radio-title">需要代写</div>
+          <div class="radio-desc">告诉我内容，我安排代写</div>
+        </div>
+      </div>
+      <div class="field" id="proxy-note-box" style="margin-top:16px; display:none;">
+        <label class="label">想说的话 / 代写要点 <span class="req">*</span></label>
+        <textarea class="textarea" id="o-note-proxy" placeholder="你想对他表达什么，有没有特别要提到的细节&#10;代写费用另议，我会在确认收款时一并告知" maxlength="1000"></textarea>
+      </div>
+      <div class="field" id="self-note-box" style="margin-top:16px;">
+        <label class="label">给画师的备注（可不填）</label>
+        <textarea class="textarea" id="o-note-self" placeholder="喜欢的电影元素、配色、想避开的东西" maxlength="500"></textarea>
+      </div>
+    </div>
+
+    <div class="form-submit">
+      <div class="form-submit-price">合计 <span>¥190</span></div>
+      <div class="form-submit-note">提交后生成订单号与收款码，付款确认后画师动笔</div>
+      <button class="btn btn-large" onclick="submitOrder()">提交订单</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 下单成功 ==================== -->
+<section class="page" id="page-success">
+  <div class="nav-bar">
+    <button class="nav-back" onclick="goPage('home')">←</button>
+    <span>订单已提交</span>
+  </div>
+  <div class="wrap">
+    <div class="success-check">✓</div>
+    <div class="success-title">订单已生成</div>
+    <div class="success-sub" id="s-order-no"></div>
+
+    <div class="notice notice-highlight">
+      付款时请备注订单号后 4 位 <b id="s-tail" class="highlight"></b>，方便我对账
+    </div>
+
+    <div class="card">
+      <div class="card-title">扫码付款</div>
+      <div class="pay-info">
+        <div class="pay-row"><span>金额</span><span class="pay-amount">¥190</span></div>
+        <div class="pay-row"><span>备注</span><span id="s-tail2" class="pay-amount"></span></div>
+      </div>
+      <div class="qr-wrap">
+        <img class="qr-img" id="s-qr" src="images/pay-qr.jpg" alt="收款码" onclick="previewImage(this.src)">
+        <div class="qr-tip">
+          长按识别二维码付款<br>
+          或保存图片 → 微信扫一扫 → 相册选图
+        </div>
+      </div>
+      <button class="btn-ghost" onclick="copyText(document.getElementById('s-tail').innerText)">复制备注数字</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">把订单信息发给我</div>
+      <div class="tiny" style="margin-bottom:12px;">复制下面这段文字，直接发微信给我，不用一条条打</div>
+      <button class="btn" onclick="copyOrderInfo()">复制下单信息</button>
+      <button class="btn-ghost" onclick="copyText('IMDWAY')">复制客服微信：IMDWAY</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">手写信寄到这</div>
+      <div class="addr-block">
+        中国广东省深圳市南山区泉园路61号绿茵丰和<br>直接放东门保安室<br>188888888
+      </div>
+      <button class="btn-ghost" onclick="copyText('中国广东省深圳市南山区泉园路61号绿茵丰和，直接放东门保安室。188888888')">复制收件地址</button>
+      <div class="tiny" style="margin-top:10px; color:#77766f;">
+        信纸 ≤A5、克重 ≤120g、1–2 页，不要夹硬物或金属
+      </div>
+    </div>
+
+    <div class="next-steps">
+      <div class="next-title">接下来</div>
+      <div class="next-list">
+        <div class="next-item"><span class="next-num">1</span> 扫码付 ¥190，备注订单号后 4 位</div>
+        <div class="next-item"><span class="next-num">2</span> 把下单信息复制发给我</div>
+        <div class="next-item"><span class="next-num">3</span> 我确认收款，安排画师动笔</div>
+        <div class="next-item"><span class="next-num">4</span> 成品图与投递视频发给你</div>
+      </div>
+    </div>
+
+    <button class="btn" onclick="goPage('detail', lastOrderId)">查看订单详情</button>
+    <button class="btn-ghost" onclick="goPage('track')">查看我的订单</button>
+  </div>
+</section>
+
+<!-- ==================== 我的订单 ==================== -->
+<section class="page" id="page-track">
+  <div class="nav-bar">
+    <button class="nav-back" onclick="goPage('home')">←</button>
+    <span>我的订单</span>
+  </div>
+  <div class="wrap">
+    <div id="track-list"></div>
+    <div class="empty-state" id="track-empty">
+      <div class="empty-icon">📭</div>
+      <div class="empty-title">还没有订单</div>
+      <div class="empty-desc">下单后这里会自动出现进度</div>
+      <button class="btn" onclick="goPage('order')">去下单</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 订单详情 ==================== -->
+<section class="page" id="page-detail">
+  <div class="nav-bar">
+    <button class="nav-back" onclick="goPage('track')">←</button>
+    <span>订单详情</span>
+  </div>
+  <div class="wrap" id="detail-wrap">
+    <div class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <div class="empty-title">加载中</div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 管理台账 ==================== -->
+<section class="page" id="page-admin">
+  <div class="nav-bar">
+    <button class="nav-back" onclick="goPage('home')">←</button>
+    <span>接单台账</span>
+  </div>
+  <div class="wrap">
+    <div class="admin-header">
+      <div class="admin-title">本地台账</div>
+      <div class="admin-sub">数据只存在这台手机，换手机不迁移</div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num" id="a-stat-unpaid">0</div>
+        <div class="stat-label">待付款</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="a-stat-draw">0</div>
+        <div class="stat-label">绘制中</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="a-stat-mail">0</div>
+        <div class="stat-label">已寄出</div>
+      </div>
+    </div>
+
+    <div class="admin-actions">
+      <button class="btn" onclick="adminPaste()">📋 粘贴客户信息</button>
+      <button class="btn-ghost" onclick="adminExport()">📤 导出备份</button>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg, #1e2a22 0%, #1a1a19 100%); border-color:rgba(93,202,165,0.15);">
+      <div style="font-size:13px; font-weight:600; color:#5DCAA5; margin-bottom:10px;">💰 快速对账</div>
+      <div style="display:flex; gap:8px;">
+        <input class="input" id="a-reconcile" style="flex:1; margin-bottom:0;" placeholder="输入微信转账备注的后 4 位" maxlength="4">
+        <button class="btn" style="width:auto; padding:12px 20px; margin-bottom:0;" onclick="adminReconcile()">查找</button>
+      </div>
+      <div class="tiny" style="margin-top:8px;">收到转账后直接输备注里的数字，一键定位订单</div>
+      <div id="reconcile-result" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="filter" style="margin-top:16px;">
+      <div class="chip on" data-filter="all" onclick="adminFilter(this)">全部</div>
+      <div class="chip" data-filter="created" onclick="adminFilter(this)">待付款</div>
+      <div class="chip" data-filter="paid" onclick="adminFilter(this)">未开工</div>
+      <div class="chip" data-filter="drawing" onclick="adminFilter(this)">绘制中</div>
+      <div class="chip" data-filter="mailed" onclick="adminFilter(this)">已寄出</div>
+      <div class="chip" data-filter="done" onclick="adminFilter(this)">已完成</div>
+    </div>
+
+    <input class="input" style="margin-bottom:10px;" id="a-keyword" placeholder="搜订单号后 4 位 / 艺人 / 手机号" oninput="adminSearch()">
+
+    <div id="admin-list"></div>
+    <div class="empty-state" id="admin-empty" style="display:none;">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">没有匹配订单</div>
+    </div>
+  </div>
+</section>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

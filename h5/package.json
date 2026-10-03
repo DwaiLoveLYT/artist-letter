@@ -1,0 +1,8 @@
+{
+  "name": "artist-letter-h5",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

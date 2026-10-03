@@ -298,9 +298,13 @@ function submitOrder(){
 }
 
 function orderInfoText(o){
+  const tail = o.order_no.slice(-4)
   return [
     '【艺人代寄 · 下单信息】',
     `订单号：${o.order_no}`,
+    // 这 4 位是 DWAY 在微信收款通知里唯一能看到的东西。
+    // 放进订单信息里，他一眼就能把「谁付的钱」和「谁的单」对上，不用来回问。
+    `付款备注（4 位）：${tail}`,
     `艺人：${o.artist}`,
     `收信国家：${o.country}`,
     `收信地址：${o.recipient_addr || '（客户未填，见下方「地址代查」）'}`,
@@ -310,7 +314,8 @@ function orderInfoText(o){
     `回信地址：${o.return_addr}`,
     `信的来源：${o.letter_source==='proxy'?'需要代写':'自己手写'}`,
     `备注：${o.letter_note||'（无）'}`,
-    `已付金额：¥190`,
+    // 不能写「已付」——客户可能在付款前就点了分享，那时钱还没到账
+    `订单金额：¥190`,
   ].join('\n')
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }

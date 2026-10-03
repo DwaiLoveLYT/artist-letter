@@ -377,3 +377,16 @@ select.input {
   border:1px solid rgba(255,255,255,.09); white-space:nowrap;
 }
 #toast.on { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* 导入确认里的「会丢哪几单」提示。
+   导入是破坏性操作，风险必须写在他按下确认之前，而不是之后。 */
+.imp-warn {
+  margin-top:12px; padding:11px 12px; border-radius:9px;
+  background:rgba(239,159,39,.12); border:1px solid rgba(239,159,39,.32);
+  text-align:left; font-size:12.5px; line-height:1.75; color:#d8b98a;
+}
+.imp-warn b { color:#EF9F27; }
+.imp-warn-tip { color:#a8916d; }
+.imp-ok {
+  margin-top:12px; font-size:12.5px; line-height:1.7; color:#7f9c8b;
+}

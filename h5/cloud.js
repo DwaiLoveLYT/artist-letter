@@ -13,11 +13,11 @@
 // 实测从深圳访问：DNS 0.004s / 连接 0.007s / 总计 0.28s，解析到腾讯云。
 //
 // ⚠ 这个地址是**发布时生成**的：每次重新发布同一个应用，分享链接都会变。
-// 已实测连续三次：83cf23c6… → 25dafc60… → 45c34785… → 6eaa80f7…
+// 已实测连续四次：83cf23c6… → 25dafc60… → 45c34785… → 6eaa80f7… → a3117d63…
 // （旧地址直接返回一张营销页）。所以**每次重新发布之后，必须把新地址更新到这里
 // 并重推一次 GitHub Pages**，否则线上客户页会连到一个死地址 ——
 // 而本地测试完全发现不了这件事（本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE = 'https://6eaa80f7f9324c7886263dc703ceb860.sg2.agentos-app.run'
+var CLOUD_BASE = 'https://a3117d634b224727ba994e441654428d.sg2.agentos-app.run'
 
 // 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）
 try {
@@ -83,6 +83,27 @@ var Cloud = {
       headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
       body: JSON.stringify({ orders: orders, deleted: deleted || [] }),
     }).then(function(r){ return r.json().catch(function(){ return {} }) })
+      .catch(function(){ return { ok:false, net:true } })
+  },
+
+  // —— 客户自服务：换设备也能查自己的单 ——
+  // 路径：GET /api/order/<order_no>?phone=<digits>。
+  //
+  // 服务端对「订单号不存在」和「手机号不匹配」返回**同一个** 404，
+  // 所以这里不去分别两种 —— 只把 HTTP 状态透出去给 UI 判断。
+  // 503（仓库暂时不可达）也单独透出，让 UI 说人话而不是假装没找到。
+  lookupOrder: function(orderNo, phoneTail){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    var url = CLOUD_BASE + '/api/order/' + encodeURIComponent(orderNo)
+    if(phoneTail) url += '?phone=' + encodeURIComponent(phoneTail)
+    return fetch(url, { cache: 'no-store' })
+      .then(function(r){
+          // 把 HTTP 状态也透出去 —— 客户端需要区分 404 / 503
+          return r.json().catch(function(){ return {} }).then(function(j){
+            j.status = r.status
+            return j
+          })
+        })
       .catch(function(){ return { ok:false, net:true } })
   },
 }

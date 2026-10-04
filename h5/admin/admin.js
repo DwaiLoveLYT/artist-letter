@@ -1640,11 +1640,33 @@ function orderCard(o){
 const MEDIA_SLOTS = [
   { slot: 'front', kind: 'image', label: '信封正面', hint: '客户最想看的那一张' },
   { slot: 'back',  kind: 'image', label: '信封反面', hint: '封口、贴票那一面' },
-  { slot: 'video', kind: 'video', label: '投递视频', hint: '一镜到底，越短越稳' },
+  { slot: 'video', kind: 'video', label: '投递视频', hint: '一镜到底，10 秒内最稳' },
 ]
 // 后端硬上限 12MB（实测 Contents API 24MB 能写但要 28 秒，
 // 读取侧只有 blobs API 扛得住大文件，12MB 是「一定跑得动」的保守值）。
 const MEDIA_MAX_BYTES = 12 * 1024 * 1024
+
+// —— 下面这两个数字是「客户那边到底要等多久」这件事的全部依据 ——
+//
+// 实测（线上探针，多个大小点都是线性）：
+//   沙箱出口 → 客户端，**每连接**大约 45KB/s。
+//   128KB→3.5s / 512KB→12.3s / 1500KB→32.0s / 4096KB→99.8s。
+//   服务端自己从 GitHub 取同一个文件只要 1.6s —— 瓶颈全在「沙箱 → 客户端」这一段。
+//   4 条并发各约 45KB/s，所以是**每连接**限速，不是总带宽。
+//
+// 结论直接影响两件事：
+//   ① 图片必须按**体积预算**压，不能按固定像素压。400KB 的图 ≈ 客户等 9 秒，
+//      这已经是「愿意等」的上限了；1MB 的图要 23 秒，看起来就像图挂了。
+//   ② 视频不能等它自己出第一帧（1.5MB 要 32 秒），必须单独传一张封面图 ——
+//      封面只有几十 KB，卡片是秒出的，真正点开播放才去下视频。
+const MEDIA_BUDGET_BYTES = 400 * 1024
+// 只用来把「要等几秒」算成一个诚实的数字给 DWAY 看，不参与任何功能逻辑。
+// 宁可算得保守一点（说慢了），也不要让他在客户面前才发现「怎么这么久」。
+const ASSUMED_KBPS = 45
+function waitHint(bytes){
+  const s = Math.max(1, Math.round(bytes / 1024 / ASSUMED_KBPS))
+  return s >= 90 ? (Math.round(s / 60) + ' 分钟左右') : (s + ' 秒左右')
+}
 
 function slotOf(o, slot){
   const list = Array.isArray(o.media) ? o.media : []
@@ -1685,8 +1707,9 @@ function mediaStrip(o){
         }
         const src = mediaSrc(o, m)
         const inner = s.kind === 'video'
-          ? `<video src="${src}" muted playsinline preload="metadata"></video><span class="pv-play">▶</span>`
-          : `<img src="${src}" alt="${s.label}">`
+          // 有封面就用封面 —— 客户那边网慢，视频自己出第一帧要好几秒
+          ? `<video src="${src}"${m.poster && mediaSrc(o, m.poster) ? ` poster="${mediaSrc(o, m.poster)}"` : ''} muted playsinline preload="metadata"></video><span class="pv-play">▶</span>`
+          : `<img src="${src}" alt="${s.label}" loading="lazy" decoding="async">`
         return `<div class="pv-slot">
           ${inner}
           <span class="pv-tag">${s.label}</span>
@@ -1699,11 +1722,11 @@ function mediaStrip(o){
       ${extras.map(m => `<div class="pv-slot">
         ${m.kind === 'video'
           ? `<video src="${mediaSrc(o, m)}" muted playsinline preload="metadata"></video><span class="pv-play">▶</span>`
-          : `<img src="${mediaSrc(o, m)}" onclick="viewImage('${mediaSrc(o, m)}')">`}
+          : `<img src="${mediaSrc(o, m)}" loading="lazy" decoding="async" onclick="viewImage('${mediaSrc(o, m)}')">`}
         <span class="pv-ops"><b onclick="event.stopPropagation();dropMedia('${o.id}','${m.id || m.file || ''}','凭证')" title="删除">✕</b></span>
       </div>`).join('')}
     </div>
-    <div class="tiny" style="margin-top:6px;">传上去之后客户在「我的订单」详情里就能看到</div>`
+    <div class="tiny" style="margin-top:6px;">传上去之后客户在「我的订单」详情里就能看到。图片会自动压到 400KB 以内；视频越短越好，10 秒内最稳。</div>`
 }
 
 function pickMedia(id, slot){
@@ -1724,12 +1747,20 @@ function pickMedia(id, slot){
 
 // 图片先压再传。
 //
-// 手机随手一张就是 4~8MB，直接传会撞上限、还会拖到十几秒。
-// 压到长边 1800px / JPEG 0.86 —— 信封上的手绘细节、字迹、邮票全都看得清，
-// 而体积通常掉到 300~600KB，上传一两秒就完事。
-function shrinkImage(file, maxEdge, quality){
-  const LIMIT = maxEdge || 1800
-  const Q = quality || 0.86
+// 手机随手一张就是 4~8MB。直接传有三重代价：
+//   撞上限、上传要十几秒、**客户那边下载更久** ——
+//   实测沙箱出口每连接只有 ~45KB/s，一张 1MB 的原图在客户手机上要转 23 秒，
+//   而客户看到的就是「图挂了 / 一直在转」。
+//
+// 所以这里按**体积预算**压，而不是按固定像素压：
+// 从「长边 1400 / 质量 0.82」起步，一级一级往下调，直到掉进预算内。
+// 1400px 下手绘的笔触、字迹、邮票齿孔都还看得清 ——
+// 压的从来不是清晰度，是「客户要不要等半分钟」。
+const SHRINK_LADDER = [
+  [1400, 0.82], [1400, 0.72], [1200, 0.72], [1200, 0.62], [1000, 0.55],
+]
+function shrinkImage(file, budget){
+  const LIMIT = budget || MEDIA_BUDGET_BYTES
   return new Promise((resolve, reject) => {
     // 浏览器读不了 HEIC 时 decode 会失败 —— 那就原样上传，让后端兜住
     const url = URL.createObjectURL(file)
@@ -1737,22 +1768,92 @@ function shrinkImage(file, maxEdge, quality){
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')) }
     img.onload = () => {
       try {
-        let w = img.naturalWidth, h = img.naturalHeight
-        if(!w || !h){ URL.revokeObjectURL(url); reject(new Error('size')); return }
-        const scale = Math.min(1, LIMIT / Math.max(w, h))
+        const w0 = img.naturalWidth, h0 = img.naturalHeight
+        if(!w0 || !h0){ URL.revokeObjectURL(url); reject(new Error('size')); return }
+        const cv = document.createElement('canvas')
+        const ctx = cv.getContext('2d')
+        let best = null
+        const step = i => {
+          if(i >= SHRINK_LADDER.length){
+            URL.revokeObjectURL(url)
+            // 整条阶梯走完还是超标 —— 那就用最小的一版，
+            // 总比原样传一张 6MB 的图好（那才是真的打不开）。
+            best ? resolve(best) : reject(new Error('encode'))
+            return
+          }
+          const edge = SHRINK_LADDER[i][0], q = SHRINK_LADDER[i][1]
+          const scale = Math.min(1, edge / Math.max(w0, h0))
+          const cw = Math.max(1, Math.round(w0 * scale))
+          const ch = Math.max(1, Math.round(h0 * scale))
+          cv.width = cw; cv.height = ch
+          ctx.clearRect(0, 0, cw, ch)
+          ctx.drawImage(img, 0, 0, cw, ch)
+          cv.toBlob(b => {
+            if(!b){ step(i + 1); return }
+            best = b
+            if(b.size <= LIMIT || i === SHRINK_LADDER.length - 1){
+              URL.revokeObjectURL(url)
+              resolve(b)
+              return
+            }
+            step(i + 1)
+          }, 'image/jpeg', q)
+        }
+        step(0)
+      } catch(e){ URL.revokeObjectURL(url); reject(e) }
+    }
+    img.src = url
+  })
+}
+
+// 从视频里抠一帧当封面。
+//
+// 为什么要这么麻烦：客户那边每连接只有 ~45KB/s，
+// 一个 1.5MB 的视频光「显示出第一帧」就要好几秒 —— 看起来就是「视频加载不出来」。
+// 有了一张几十 KB 的封面图，视频卡片是**秒出**的，
+// 真正点开播放才去下视频，等待变成了「他自己按的」，感受完全不同。
+//
+// 任何一步失败都返回 null，**绝不阻断上传**：
+// 没有封面最多是回到老样子（慢一点），而不是视频传不上去。
+function grabPoster(file){
+  return new Promise(resolve => {
+    let url = ''
+    try { url = URL.createObjectURL(file) } catch(e){ resolve(null); return }
+    const v = document.createElement('video')
+    let done = false
+    const finish = b => {
+      if(done) return
+      done = true
+      try { URL.revokeObjectURL(url) } catch(e){}
+      resolve(b || null)
+    }
+    // 有的视频 seek 不动（或者浏览器解不了这个编码）—— 别把整个上传卡死在这
+    const t = setTimeout(() => finish(null), 8000)
+    v.muted = true; v.playsInline = true; v.preload = 'auto'
+    v.onerror = () => { clearTimeout(t); finish(null) }
+    v.onloadedmetadata = () => {
+      try {
+        const d = Number(v.duration)
+        // 取 10% 处（封顶 0.5 秒）：开头常常是一团黑，往后一点更容易出画面
+        v.currentTime = Math.min(0.5, Math.max(0.05, (isFinite(d) && d > 0 ? d : 1) * 0.1))
+      } catch(e){ clearTimeout(t); finish(null) }
+    }
+    v.onseeked = () => {
+      clearTimeout(t)
+      try {
+        const w = v.videoWidth, h = v.videoHeight
+        if(!w || !h){ finish(null); return }
+        const edge = 720
+        const scale = Math.min(1, edge / Math.max(w, h))
         const cw = Math.max(1, Math.round(w * scale))
         const ch = Math.max(1, Math.round(h * scale))
         const cv = document.createElement('canvas')
         cv.width = cw; cv.height = ch
-        cv.getContext('2d').drawImage(img, 0, 0, cw, ch)
-        cv.toBlob(b => {
-          URL.revokeObjectURL(url)
-          if(b) resolve(b)
-          else reject(new Error('encode'))
-        }, 'image/jpeg', Q)
-      } catch(e){ URL.revokeObjectURL(url); reject(e) }
+        cv.getContext('2d').drawImage(v, 0, 0, cw, ch)
+        cv.toBlob(b => finish(b), 'image/jpeg', 0.7)
+      } catch(e){ finish(null) }
     }
-    img.src = url
+    v.src = url
   })
 }
 
@@ -1780,7 +1881,21 @@ async function uploadSlot(id, slot, file){
     return
   }
 
-  toast('正在上传 ' + mb(blob.size) + '…')
+  // 视频：先抠一张封面一起传。
+  // 这张封面决定了客户是「秒看到画面」还是「盯着转圈」—— 见 grabPoster 的注释。
+  let poster = null
+  if(s.kind === 'video'){
+    toast('正在取封面…')
+    try {
+      const p = await grabPoster(file)
+      if(p){
+        const pr = await Cloud.uploadMedia(cloudKey, o.order_no, 'image', p)
+        if(pr && pr.ok) poster = pr.media
+      }
+    } catch(e){ poster = null }   // 取不到封面也照常传视频
+  }
+
+  toast('正在上传 ' + mb(blob.size) + '，客户那边大概 ' + waitHint(blob.size) + '…')
   const r = await Cloud.uploadMedia(cloudKey, o.order_no, s.kind, blob)
   if(!r || !r.ok){
     const why = !r ? '网络不通'
@@ -1789,6 +1904,8 @@ async function uploadSlot(id, slot, file){
       : r.error === 'bad_key' ? '同步密钥不对'
       : r.status === 503 ? '服务端连不上 GitHub'
       : (r.error || ('上传失败 ' + (r.status || '')))
+    // 视频没传上去的话，刚才那张封面就成了孤儿 —— 顺手删掉，别在私有仓库里积着
+    if(poster && poster.file) Cloud.deleteMedia(cloudKey, o.order_no, poster.file).catch(() => {})
     toast('没传上去：' + why)
     return
   }
@@ -1797,10 +1914,16 @@ async function uploadSlot(id, slot, file){
   const old = slotOf(o, s.slot)
   const kept = (Array.isArray(o.media) ? o.media : []).filter(m => m && m.slot !== s.slot)
   const rec = Object.assign({ slot: s.slot }, r.media)
+  if(poster) rec.poster = poster
   updOrder(id, { media: kept.concat([rec]) })
   if(old && old.file) Cloud.deleteMedia(cloudKey, o.order_no, old.file).catch(() => {})
+  if(old && old.poster && old.poster.file) Cloud.deleteMedia(cloudKey, o.order_no, old.poster.file).catch(() => {})
   log(id, '上传' + s.label + ' ' + mb(blob.size))
-  toast(s.label + '已上传 · 客户能看到')
+  // 视频报两件事：视频多大 + 封面有没有取到。
+  // 取不到封面要说出来 —— 否则他看到客户那边「还是要转圈」会以为是 bug。
+  toast(s.kind === 'video'
+    ? (s.label + '已上传 · 客户能看到' + (poster ? '' : '（封面没取到，客户要等几秒才出画面）'))
+    : s.label + '已上传 · 客户能看到')
   renderList()
 }
 
@@ -1811,6 +1934,8 @@ function dropMedia(id, mediaId, label){
   if(!m) return
   updOrder(id, { media: list.filter(x => x !== m) })
   if(m.file && cloudKey) Cloud.deleteMedia(cloudKey, o.order_no, m.file).catch(() => {})
+  // 视频自带的封面也要跟着删 —— 不然它会变成私有仓库里一个没人再引用的孤儿文件
+  if(m.poster && m.poster.file && cloudKey) Cloud.deleteMedia(cloudKey, o.order_no, m.poster.file).catch(() => {})
   log(id, '删除' + (label || '凭证'))
   toast('已删除')
   renderList()
@@ -1944,7 +2069,7 @@ function pickExtra(id, accept){
     let okCount = 0, skipped = 0
     for(let i = 0; i < files.length; i++){
       const f = files[i]
-      toast('正在上传 ' + (i + 1) + '/' + files.length + '…')
+      toast('正在处理 ' + (i + 1) + '/' + files.length + '…')
       let blob = f
       if(String(f.type).indexOf('video') === 0){
         if(f.size > MEDIA_MAX_BYTES){ skipped++; continue }

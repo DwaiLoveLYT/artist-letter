@@ -410,6 +410,54 @@ body {
   margin-top:10px; padding-top:10px;
   border-top:1px solid rgba(255,255,255,0.05);
 }
+
+/* 换设备查订单：常驻卡片 */
+.lookup-card { padding:16px 16px 14px; }
+.lookup-sub {
+  font-size:13px; color:#8a9a8f; line-height:1.7;
+  margin-bottom:14px;
+}
+.lookup-sub b { color:#f5f5f0; font-weight:600; }
+.lookup-form {
+  display:flex; flex-wrap:wrap; gap:9px;
+  margin-bottom:6px;
+}
+.lookup-input {
+  flex:1 1 calc(50% - 5px); min-width:140px;
+  padding:11px 13px; font-size:14px;
+  background:#0d0f12; border:1px solid rgba(255,255,255,0.08);
+  border-radius:10px; color:#f5f5f0;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.5px;
+}
+.lookup-input::placeholder { color:#5a5a54; letter-spacing:0; font-family:inherit; }
+.lookup-input:focus { outline:none; border-color:rgba(93,202,165,0.4); }
+.lookup-btn {
+  flex:1 1 100%; margin-top:6px;
+  padding:13px; font-size:14.5px;
+}
+.lookup-err {
+  font-size:13px; color:#EF9F27; line-height:1.65;
+  margin-top:12px; padding:10px 12px;
+  background:rgba(239,159,39,0.08); border:1px solid rgba(239,159,39,0.2);
+  border-radius:10px;
+}
+.lookup-err b { color:#f5c698; }
+.lookup-loading {
+  font-size:13px; color:#8a9a8f;
+  margin-top:12px; text-align:center;
+  padding:10px;
+}
+.lookup-hit {
+  margin-top:14px; padding:14px;
+  background:rgba(93,202,165,0.07); border:1px solid rgba(93,202,165,0.25);
+  border-radius:12px;
+}
+.lookup-hit-head {
+  font-size:13.5px; font-weight:600; color:#5DCAA5;
+  margin-bottom:10px;
+}
+.lookup-hit .row { padding:6px 0; }
 .addr-block {
   font-size:15px; color:#c8c7c2; line-height:1.7; margin-bottom:12px;
 }
@@ -471,6 +519,67 @@ body {
   font-size:12.5px; color:#7d7d75; line-height:1.65;
   margin-top:11px; text-align:center;
 }
+
+/* 两种付款方式：好友转账（主）/ 扫码付款（备） */
+.pay-methods {
+  display:flex; flex-direction:column; gap:10px;
+  margin:16px 0 4px;
+}
+.pay-method {
+  background:#141413; border:1px solid rgba(255,255,255,0.06);
+  border-radius:13px; padding:14px 14px 13px;
+}
+.pay-method-primary {
+  background:linear-gradient(135deg, rgba(93,202,165,0.10) 0%, rgba(93,202,165,0.04) 100%);
+  border-color:rgba(93,202,165,0.28);
+}
+.pay-method-head {
+  display:flex; align-items:center; gap:9px; margin-bottom:10px;
+}
+.pay-method-num {
+  flex:0 0 24px; height:24px; border-radius:50%;
+  background:rgba(93,202,165,0.18); color:#5DCAA5;
+  font-weight:700; font-size:12px;
+  display:flex; align-items:center; justify-content:center;
+}
+.pay-method-primary .pay-method-num {
+  background:#5DCAA5; color:#0d0f12;
+}
+.pay-method-title {
+  font-size:14px; font-weight:600; color:#f5f5f0;
+}
+.pay-method-tag {
+  margin-left:auto; font-size:11px; font-weight:600;
+  padding:2px 8px; border-radius:999px;
+  background:rgba(255,200,87,0.15); color:#e6c068;
+}
+.pay-method-foot {
+  font-size:12.5px; color:#9a9a92; line-height:1.65;
+}
+.pay-method-foot b { color:#5DCAA5; letter-spacing:1px; }
+
+.pay-wx-row {
+  display:flex; align-items:center; gap:10px;
+  background:#0d0f12; border:1px solid rgba(255,255,255,0.05);
+  border-radius:10px; padding:10px 12px; margin-bottom:10px;
+}
+.pay-wx-label {
+  font-size:11.5px; color:#7d7d75;
+}
+.pay-wx-id {
+  flex:1; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:15px; font-weight:600; color:#5DCAA5; letter-spacing:.5px;
+}
+.pay-wx-row .contact-copy {
+  flex:0 0 auto; padding:6px 12px; font-size:12px;
+}
+
+.pay-method-disabled { opacity:.65; }
+.pay-method-disabled-d {
+  font-size:12.5px; color:#9a9a92; line-height:1.7;
+  padding:6px 0 2px;
+}
+
 .pay-or {
   display:flex; align-items:center; gap:10px;
   margin:16px 0 12px; font-size:11.5px; color:#5a5a54; letter-spacing:.4px;

@@ -68,6 +68,8 @@ const CLOUD_SKIP_STORE = 'artist_letter_cloud_skip'   // 这台设备主动跳�
 let cloudKey   = ''
 let cloudBusy  = false
 let cloudAt    = 0            // 上次成功同步的时间
+let cloudReadOK = false       // 本次打开后台后至少一次 GET /api/ledger 确认成功；本机列表不能冒充全部订单
+let cloudVerifiedNos = new Set() // 本次确实在服务端见过的订单，和本机旧快照分开
 let cloudErr   = ''
 let cloudMute  = false        // 正在把远端合并回本地时，别再触发推送（否则自己推自己）
 let cloudTimer = null
@@ -143,12 +145,21 @@ async function cloudPull(silent){
     renderCloudBar()
     return r || { ok:false }
   }
+  // 200 不等于「全部订单都已读到」。服务端对账失败时 r.orders 可能只是内存旧快照；
+  // 不再拿它当全部订单，也不告诉用户「两边一致」。
+  if(r.reconciled === false){
+    cloudErr = '服务端暂时无法核对全部订单，请稍后重试'
+    cloudReadOK = false
+    renderCloudBar()
+    return { ok:false, error:'reconcile_failed' }
+  }
   const localBefore = allOrders()
   const beforeNos = new Set(localBefore.map(o => o.order_no))
   const merged = mergeByStamp(localBefore, r.orders)
   cloudMute = true
   try { saveOrders(merged) } finally { cloudMute = false }
-  cloudAt = Date.now(); cloudErr = ''
+  cloudAt = Date.now(); cloudErr = ''; cloudReadOK = true
+  cloudVerifiedNos = new Set((r.orders || []).map(o => o && o.order_no).filter(Boolean))
   cloudTotal = (typeof r.total === 'number') ? r.total : -1
   cloudReconciled = (r.reconciled === undefined) ? null : !!r.reconciled
 
@@ -191,8 +202,9 @@ async function cloudPull(silent){
   }
 
   renderList()
-  // 本地可能比云端多（上次没推成功的改动）—— 拉完顺手推一次补齐
-  cloudPush(true)
+  // 读取和回写分离：这次只是「查看客户下过什么单」。
+  // 不能把同一浏览器遗留的本机订单无提示地推上服务端（可能是旧测试单），
+  // 更不能让它们冒充已经来自客户设备的订单；人工编辑另走 cloudTouch/cloudPush。
   return { ok:true, added: Math.max(0, merged.length - localBefore.length),
            fresh: cloudFresh.length, updated: cloudUpdated.length }
 }
@@ -267,15 +279,43 @@ function agoText(ts){
   return Math.floor(s / 86400) + ' 天前'
 }
 
+// 6 位 PIN 只解锁当前浏览器，不是跨设备账号。云端还没核对成功时，
+// 本机台账**不能**被当成「全部订单」。
+//
+// 但这里刻意**不遮挡**列表 —— 遮挡是错的方向：
+// 他在地铁上、信号差、或者云端刚好抽风的时候，连自己本机存着的单都看不见，
+// 那是另一种「有差错」，而且是把他已经拿到手的数据也一起拿走。
+// 正确的做法是「显示 + 明确隔离」：整块台账挂一条告示，
+// 每张还没上云的单自己带「本机」标记（见 orderCard）。
+function renderCloudGate(){
+  const gate = document.getElementById('cloud-gate')
+  if(!gate) return
+  if(cloudReadOK){ gate.style.display = 'none'; gate.innerHTML = ''; return }
+  const n = allOrders().length
+  gate.style.display = 'block'
+  gate.innerHTML = '<h2>还没连上全部订单 —— 下面是本机暂存的 ' + n + ' 单</h2>'
+    + '<p>刚输的 6 位密码只负责解锁这台浏览器。<b>同一个微信号打开，不代表订单自动共享。</b>'
+    + ' 云端核对成功以前，这些单<b>不代表客户下过的全部订单</b>：客户刚下的单可能不在里面。</p>'
+    + (cloudKey
+      ? '<p>已填同步密钥；' + (cloudErr ? '本次拉取失败：' + esc(cloudErr) : '正在拉取云端台账…') + '</p>'
+        + '<button class="btn-full" onclick="cloudPull()">重新读取云端订单</button>'
+        + '<button class="btn-full grey" onclick="openCloudKey()">检查同步密钥</button>'
+      : '<p>在<b>这台设备</b>填一次同步密钥，成功读取后才算看到了全部订单。电脑和手机要各填一次。</p>'
+        + '<button class="btn-full" onclick="openCloudKey()">填同步密钥 · 读取全部订单</button>')
+}
+
 function renderCloudBar(){
   const box = document.getElementById('cloud-bar')
   if(!box) return
+  renderCloudGate()
   if(!window.Cloud || !Cloud.on()){
-    box.innerHTML = ''
+    box.innerHTML = '<div class="cl-bar err"><div class="cl-main"><div class="cl-t">⚠ 目前只在这台浏览器保存订单，跨设备同步未开启</div>'
+      + '<div class="cl-d">同一个微信号也不会让本机订单自动出现在其他设备。请检查这台设备的同步地址。</div></div></div>'
     return
   }
 
   const local = allOrders().length
+  const localOnly = cloudReadOK ? allOrders().filter(o => !cloudVerifiedNos.has(o.order_no)).length : 0
 
   // —— ① 这台设备还没填过同步密钥 ——
   // 这是「换个设备登录就看不到单」的**唯一**原因，也是整个后台最容易漏掉的一步。
@@ -314,18 +354,20 @@ function renderCloudBar(){
 
   // —— ③ 正常：把两个数字摊开 ——
   // 「云端 2 / 本机 2」比「同步成功」有用得多：差一个数，就说明有事。
-  const diff = (cloudTotal >= 0 && cloudTotal !== local)
+  const diff = (cloudTotal >= 0 && cloudTotal !== cloudVerifiedNos.size)
   const title = cloudBusy
     ? '正在同步…'
-    : ('云端同步已开启 · ' + (cloudAt ? agoText(cloudAt) : '还没同步过'))
-  const desc = diff
-    ? `云端 ${cloudTotal} 单 / 本机 ${local} 单 —— 数字对不上，点「诊断」看差在哪`
-    : (cloudTotal >= 0
-        ? `云端 ${cloudTotal} 单 / 本机 ${local} 单 · 两边一致。客户页下的单每 ${Math.round(CLOUD_POLL_MS/1000)} 秒自动进来一次`
-        : `本机 ${local} 单 · 客户页下的单会自动进来；这边的改动也会推上去`)
+    : ('云端已读取 · ' + (cloudAt ? agoText(cloudAt) : '还没同步过'))
+  const desc = localOnly
+    ? `云端确认 ${cloudVerifiedNos.size} 单，另有本机 ${localOnly} 单还没进云端（这些单上标着「本机」）；本机数据不会丢。`
+    : (diff
+      ? `云端报 ${cloudTotal} 单 / 已确认 ${cloudVerifiedNos.size} 单 —— 数字对不上，请重试并看诊断`
+      : (cloudTotal >= 0
+          ? `云端 ${cloudTotal} 单 / 本机 ${local} 单 · 两边一致。客户页下的单每 ${Math.round(CLOUD_POLL_MS/1000)} 秒自动进来一次`
+          : `本机 ${local} 单 · 客户页下的单会自动进来；这边的改动也会推上去`))
 
   box.innerHTML = `
-    <div class="cl-bar ${diff ? 'err' : 'ok'}">
+    <div class="cl-bar ${diff || localOnly ? 'err' : 'ok'}">
       <div class="cl-main">
         <div class="cl-t">${esc(title)}</div>
         <div class="cl-d">${esc(desc)}</div>
@@ -466,6 +508,7 @@ async function doSaveCloudKey(){
 }
 
 function doCloudOff(){
+  cloudReadOK = false
   cloudSaveKey('')
   // 主动断开 = 以后别再自动弹密钥框，但那条告示一直留着
   try { localStorage.setItem(CLOUD_SKIP_STORE, '1') } catch(e){}
@@ -790,36 +833,29 @@ function unlock(){
   document.getElementById('app').style.display  = 'block'
   appTouched = false        // 从「这一刻」开始算他动没动过手（见 unlock 末尾的自动弹层）
   renderBoard(); renderChips(); renderList()
-  // 进门就去拉一次云端 —— 客户在别的设备上下的单，这一步才会出现在台账里。
-  // 拉失败不影响任何本地功能，只是顶栏会提示。
+  // 进门就去拉一次云端。成功前不能把本机台账当成「全部订单」给用户看。
+  cloudReadOK = false
+  cloudVerifiedNos = new Set()
   cloudLoad()
   renderCloudBar()
   cloudPull(true)
   cloudPollStart()
 
   // —— 新设备第一次进门：直接弹密钥输入 ——
-  // 这是「换个设备登录就看不到单」的唯一原因。原来只靠一条细提示，
-  // 很容易被忽略；而只要忽略了，他看到的永远是一份不完整的台账，
-  // 却以为「系统坏了」。所以这里主动把这一步推到他面前。
+  // 没有密钥是「换个设备登录就看不到单」的常见原因，但也可能是客户订单压根没进云端。
+  // 原来只靠一条细提示，很容易被忽略；现在未验云端前直接挡住本机列表。
   // 主动断开过同步的设备（CLOUD_SKIP_STORE）不再打扰，只留那条告示。
   let skipped = false
   try { skipped = localStorage.getItem(CLOUD_SKIP_STORE) === '1' } catch(e){}
-  if(!cloudKey && !skipped){
-    setTimeout(() => {
-      if(cloudKey) return
-      // ⚠ 他要是已经自己点开了别的面板（正在「新建订单」粘客户信息），就别弹 ——
-      // openSheet 是同一个容器，弹出来会**把他正在填的东西直接顶掉**。
-      // 这个坑是线上全量测试抓到的：进后台后 700ms 内点「新建订单」，
-      // 粘贴框刚出来就被密钥面板替换，`#paste-box` 直接消失。
-      const sh = document.getElementById('sheet')
-      if(sh && sh.classList.contains('on')) return
-      // 同一个道理的更一般情况：进门之后他只要动过手，就说明已经在干活了。
-      // 这一刻弹一个「请填密钥」出来，只会打断他 —— 顶栏那条告示一直都在，
-      // 他需要的时候自己会点。
-      if(appTouched) return
-      openCloudKey()
-    }, 700)
-  }
+  if(!cloudKey && !skipped) setTimeout(offerCloudKey, 700)
+}
+
+function offerCloudKey(){
+  if(cloudKey) return
+  // 已经开了别的面板（例如在「新建订单」里填数据）就不能覆盖它。
+  const sh = document.getElementById('sheet')
+  if((sh && sh.classList.contains('on')) || appTouched) return
+  openCloudKey()
 }
 
 function resetPin(){
@@ -1495,7 +1531,9 @@ function renderList(){
   renderBoard(); renderChips(); renderLocalStrip(); renderBackupNudge(); renderCloudBar()
   const kw = (document.getElementById('kw').value || '').trim().toUpperCase()
 
-  let list = allOrders().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))
+  // 本机的单全都列出来（离线也要能用），但**没在本次云端核对里出现过**的单
+  // 会在卡片上挂「本机」标记（见 orderCard）—— 显示出来，但不冒充云端确认过的订单。
+  let list = allOrders().slice().sort((a,b) => (b.created_at || 0) - (a.created_at || 0))
   if(filterKey === 'unpaid')      list = list.filter(o => o.pay_status !== 'paid')
   else if(filterKey === 'lookup') list = list.filter(needLookup)
   else if(filterKey !== 'all')    list = list.filter(o => o.status === filterKey)
@@ -1527,6 +1565,9 @@ function orderCard(o){
   const isNew = freshNos.has(o.order_no)
   const isUpd = !isNew && updNos.has(o.order_no)
   const mark  = isNew || isUpd
+  // 本次云端核对里没见到这一单 —— 它只是本机存着的。
+  // 必须标出来：否则「同一台设备上看得见」会被当成「云端确实有这一单」。
+  const localOnly = !cloudVerifiedNos.has(o.order_no)
 
   return `
   <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''} ${mark ? 'fresh' : ''}" id="od-${o.id}">
@@ -1538,6 +1579,7 @@ function orderCard(o){
       <div class="o-tags">
         <span class="tag ${paid ? 'green' : 'amber'}">${paid ? '已收款' : '待收款'}</span>
         <span class="tag sage">${statusLabel(o.status)}</span>
+        ${localOnly ? '<span class="tag local" title="本次没有在云端核对到这一单，它目前只存在于这台设备">本机</span>' : ''}
         ${lookup ? '<span class="tag amber">地址待查</span>'
                  : (o.addr_lookup ? '<span class="tag sage">代查地址</span>' : '')}
       </div>

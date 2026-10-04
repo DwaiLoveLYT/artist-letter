@@ -126,6 +126,10 @@ let lastOrderId=''
 function goPage(name, param){
   if(name==='detail' && param){ renderDetail(param); lastOrderId=param }
   if(name==='track') renderTrack()
+  // 进这两个页面就去服务端拉一次最新进度 —— 本机那份是下单时的快照，不是真相。
+  // 不 await：页面先出来，进度随后到（拉到了会自己重渲染）。
+  if(name==='detail' && param) refreshMyOrders({ only: param })
+  if(name==='track') refreshMyOrders()
   if(name==='order'){
     restoreProfile()      // 回头客：自动带出上次填过的信息
     bindFormProgress()    // 进度条跟着已填项走（restoreProfile 带出来的也算）
@@ -614,6 +618,26 @@ function renderTrack(){
 //   - 服务端对「不存在的订单号」和「手机号不匹配」返回同一个 404（不泄漏存在性）；
 //   - 这里就把所有 404 都显示成「没找到」；
 //   - 服务端 503 = 仓库暂时打不通，诚实说「现在查不到，再试一次」而不是给假数据。
+let lastLookup = null      // 最近一次查到的服务端订单（「存到这台设备」要用）
+
+// 把查回来的那一单落进本机 —— 之后它就会跟着「进度自动刷新」一起走。
+// 不自动存、给一个明确的按钮，是因为「本机的订单」这个标题必须诚实：
+// 客户得知道这一条是他自己存进来的，而不是凭空出现的。
+function saveLookedUp(){
+  const o = lastLookup
+  if(!o || !o.order_no) return
+  if(allOrders().some(x => x.order_no === o.order_no)){ toast('这一单已经在这台设备上了'); return }
+  // 服务端那份的 id 是当初下单那台设备生成的，这里必须换成这台设备的本地 id，
+  // 否则两台设备的 id 撞在一起时，卡片、展开状态全会串位。
+  const local = Object.assign({}, o, {
+    id: 'lk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    sync_at: Date.now(),
+  })
+  addOrder(local)
+  toast('已存到这台设备')
+  goPage('track')
+}
+
 async function lookupOrder(){
   const noEl = document.getElementById('lookup-no')
   const phEl = document.getElementById('lookup-phone')
@@ -640,6 +664,8 @@ async function lookupOrder(){
   const r = await Cloud.lookupOrder(no, phRaw).catch(() => null)
   if(r && r.ok && r.order){
     const o = r.order
+    lastLookup = o
+    const already = allOrders().some(x => x.order_no === o.order_no)
     out.innerHTML = `
       <div class="lookup-hit">
         <div class="lookup-hit-head">查到了 ✓ 这是你的单</div>
@@ -648,6 +674,9 @@ async function lookupOrder(){
         <div class="row"><div class="row-key">状态</div><div class="row-val"><span class="${tagClass(o.status)}">${statusLabel(o.status)}</span></div></div>
         <div class="row"><div class="row-key">下单时间</div><div class="row-val">${fmtTimeHuman(o.created_at)}</div></div>
         <div class="row"><div class="row-key">更新时间</div><div class="row-val">${fmtTimeHuman(o.updated_at || o.created_at)}</div></div>
+        ${already ? '' :
+          '<button class="btn" style="margin-top:12px;width:100%;" onclick="saveLookedUp()">存到这台设备</button>'
+          + '<div class="tiny" style="margin-top:6px;">存下之后，这一单会出现在「本机的订单」里，进度更新会自动跟着走</div>'}
       </div>`
     return
   }
@@ -658,6 +687,155 @@ async function lookupOrder(){
   // 404 / 网络 / 其他 —— 一律说「没找到」，不暴露技术细节
   out.innerHTML = '<div class="lookup-err">没找到这一单 —— 检查一下订单号和手机号后 4 位对不对</div>'
 }
+
+// ==================== 从服务端刷新进度 ====================
+//
+// 「我更新了进度，客户端看不到 / 换台设备也看不到」的根因就在这一段缺失：
+// 「我的订单」和「订单详情」原本**只读本机 localStorage**，
+// 而本机那份是「下单那一刻的快照」——它永远不会自己变。
+// 后台把状态从「制作中」改成「已寄出」，客户端还一直显示「制作中」，
+// 客户会以为你根本没动过他的单。这是最伤信任的一类 bug，比看不到单还糟。
+//
+// 所以每次进这两个页面，都拿本机每一单去服务端问一次最新状态，合并回本地。
+//
+// 合并规则（很重要）：**只覆盖服务端确实返回了的字段**。
+// 服务端会主动剔除 admin_note 这类内部字段；如果无脑整体替换，
+// 客户本机存的「我的留言」会在一次刷新之后凭空消失。
+//
+// 限流：服务端查单接口是 30 次/小时/IP，必须克制 ——
+//   · 单笔冷却 60 秒     —— 反复切页面不会反复打同一个单
+//   · 单次最多 6 单      —— 客户手上通常只有 1~2 单
+//   · 优先刷「最久没刷过」的 —— 单子多的时候自然轮转，不会永远只刷前几单
+//   · 撞上 429 立刻停手
+const REFRESH_ONE_MS = 60000
+const REFRESH_MAX    = 6
+
+// 客户端该认服务端的哪些字段。
+// 刻意**不含** admin_note：服务端不会把它给客户端（那是后台内部备注），
+// 放进来只会在每次刷新时把本机那份抹掉。
+const SYNC_FIELDS = ['status','pay_status','recipient_addr','addr_lookup','media',
+                     'updated_at','artist','country','return_addr','letter_source','letter_note']
+
+let refreshRunning = null      // 正在跑的那一次（见下）
+
+// 服务端那一份 vs 本机这一份 —— 只挑出真正不一样、且服务端确实给了的字段
+function serverPatch(local, remote){
+  const patch = {}
+  SYNC_FIELDS.forEach(k => {
+    if(remote[k] === undefined) return                       // 服务端没这个字段 → 不动本机的
+    if(JSON.stringify(remote[k]) === JSON.stringify(local[k])) return
+    patch[k] = remote[k]
+  })
+  return patch
+}
+
+// 同步状态行。两个页面共用同一个函数 —— 文案只有一个来源，不会两边说法不一致。
+function syncLine(html, kind){
+  ;['track-sync','detail-sync'].forEach(id => {
+    const el = document.getElementById(id)
+    if(!el) return
+    if(!html){ el.style.display='none'; el.innerHTML=''; return }
+    el.style.display = 'block'
+    el.className = 'track-sync' + (kind ? ' ' + kind : '')
+    el.innerHTML = html
+  })
+}
+const syncRetryBtn = '<button class="sync-btn" onclick="refreshMyOrders({manual:true})">重试</button>'
+
+// opts.only  只刷这一单（进订单详情时用，不必把整份都拉一遍）
+// opts.manual 用户主动点的 —— 不受「刚刷过」的影响
+//
+// 同一时刻只允许一次在跑。但**手动点按钮时必须能等到结果**：
+// 原来撞上正在跑的自动刷新就直接返回 {busy:true}，按钮看起来完全没反应，
+// 客户会以为坏了、然后一直点 —— 所以这里把手动请求接到同一次上，等它跑完。
+function refreshMyOrders(opts){
+  const o = opts || {}
+  if(refreshRunning) return refreshRunning
+  refreshRunning = doRefreshOrders(o).then(
+    r => { refreshRunning = null; return r },
+    e => { refreshRunning = null; throw e }
+  )
+  return refreshRunning
+}
+
+async function doRefreshOrders(o){
+  if(!window.Cloud || !Cloud.on()){ syncLine('', ''); return { ok:false, off:true } }
+
+  const all = allOrders()
+  if(!all.length){ syncLine('', ''); return { ok:true, checked:0 } }
+
+  const now = Date.now()
+  let pool = all.filter(x => x.order_no)
+  if(o.only) pool = pool.filter(x => x.id === o.only)
+  // 最久没刷过的排前面 —— 单子多的时候自然轮转
+  pool.sort((a,b) => (Number(a.sync_at)||0) - (Number(b.sync_at)||0)
+                  || (Number(b.created_at)||0) - (Number(a.created_at)||0))
+  // 手动点「刷新进度」是他明确表达了「现在就要」——
+  // 只留 5 秒的最小间隔防连点，不再让他等满 60 秒冷却。
+  // （自动刷新必须守 60 秒：服务端查单接口限流 30 次/小时/IP。）
+  const gap = o.manual ? 5000 : REFRESH_ONE_MS
+  let targets = pool.filter(x => now - (Number(x.sync_at)||0) > gap)
+  if(!o.only) targets = targets.slice(0, REFRESH_MAX)
+  if(!targets.length){
+    // 手动点的却什么都没刷 → 必须给一句回应，不能默默什么都不发生
+    if(o.manual) syncLine('刚刚已经刷过一次了，稍等一下再点', '')
+    else syncLine('', '')
+    return { ok:true, checked:0 }
+  }
+
+  syncLine('正在同步最新进度…', 'busy')
+
+  let checked = 0, changed = 0, failed = 0, limited = false
+  for(const ord of targets){
+    let r = null
+    try { r = await Cloud.lookupOrder(ord.order_no, ord.customer_phone) } catch(e){ r = null }
+
+    if(r && r.status === 429){ limited = true; break }        // 限流了就别再打
+    if(r && r.ok && r.order){
+      checked++
+      const patch = serverPatch(ord, r.order)
+      if(Object.keys(patch).length) changed++
+      updOrder(ord.id, Object.assign(patch, { sync_at: Date.now() }))
+      continue
+    }
+    // 404 / 400 = 这一单服务端查不到（还没推上去，或手机尾号对不上）——
+    // 这不是「同步坏了」，是这一单本来就没上去，不该拿它吓客户。
+    if(r && (r.status === 404 || r.status === 400)){ continue }
+    failed++
+  }
+
+  // 状态变了 → 重渲染。必须先渲染再写状态行：renderDetail 会重建 #detail-sync。
+  const cur = document.querySelector('.page.active')
+  const onTrack  = cur && cur.id === 'page-track'
+  const onDetail = cur && cur.id === 'page-detail'
+  if(changed){
+    if(onTrack) renderTrack()
+    if(onDetail && lastOrderId) renderDetail(lastOrderId)
+  }
+
+  if(limited){
+    syncLine('查询有点频繁，稍等一会儿再点「刷新进度」' + syncRetryBtn, 'warn')
+  }else if(checked === 0 && failed){
+    // 一单都没拉到 —— 必须说清「你现在看到的进度可能是旧的」，不能装作没事
+    syncLine('⚠️ 没连上服务端，下面显示的进度可能是旧的' + syncRetryBtn, 'warn')
+  }else if(changed){
+    syncLine('✓ 进度刚刚更新过')
+  }else{
+    syncLine('✓ 已是最新 · 刚刚同步')
+  }
+  return { ok:true, checked, changed, failed, limited }
+}
+
+// 回到前台 / 网络恢复 —— 顺手刷一次，客户不用自己想起来点刷新
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) return
+  const cur = document.querySelector('.page.active')
+  if(cur && (cur.id === 'page-track' || cur.id === 'page-detail')) refreshMyOrders()
+})
+window.addEventListener('online', () => {
+  const cur = document.querySelector('.page.active')
+  if(cur && (cur.id === 'page-track' || cur.id === 'page-detail')) refreshMyOrders()
+})
 
 // ==================== 订单详情 ====================
 function renderDetail(id){
@@ -677,6 +855,8 @@ function renderDetail(id){
       <div class="hero-sub">订单号 ${escapeHtml(o.order_no)} · ${fmtTime(o.created_at)}</div>
     </div>
     <button class="btn-ghost" style="margin-bottom:14px;" onclick="copyOrderNo()">复制订单号</button>
+    <!-- 进度同步状态：进这一页会单独刷这一单，结果如实写在这里 -->
+    <div id="detail-sync" class="track-sync" style="display:none;"></div>
     ${o.status==='created'?payGuideHtml(o):''}
     <div class="card">
       <div class="card-title">进度</div>
@@ -726,6 +906,7 @@ function renderDetail(id){
       <div class="row"><div class="row-key">付款</div><div class="row-val">${o.pay_status==='paid'?'已确认收款':'待付款'}</div></div>
       <div class="row"><div class="row-key">信的来源</div><div class="row-val">${o.letter_source==='proxy'?'需要代写':'自己手写'}</div></div>
       ${o.letter_note?`<div class="row"><div class="row-key">内容备注</div><div class="row-val">${escapeHtml(o.letter_note)}</div></div>`:''}
+      ${o.updated_at?`<div class="row"><div class="row-key">进度更新</div><div class="row-val">${fmtTimeHuman(o.updated_at)}</div></div>`:''}
     </div>
   `
 }

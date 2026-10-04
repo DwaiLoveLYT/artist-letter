@@ -282,9 +282,26 @@ body {
   border-bottom:2px solid transparent;
 }
 .form-progress-step.active { color:#5DCAA5; border-bottom-color:#5DCAA5; }
+.form-progress-count { font-size:11px; opacity:.7; margin-left:2px; font-variant-numeric:tabular-nums; }
 .form-progress-line {
   flex:1; height:1px; background:rgba(255,255,255,0.08); max-width:40px;
 }
+/* 填写进度：让客户随时知道「还差几项」，而不是填到一半靠猜 */
+.form-fill-bar {
+  height:3px; border-radius:2px; background:rgba(255,255,255,0.07);
+  margin:-8px 20px 8px; overflow:hidden;
+}
+.form-fill-bar-in {
+  height:100%; width:0; border-radius:2px;
+  background:linear-gradient(90deg,#5DCAA5,#8fe6c6);
+  transition:width .35s cubic-bezier(.4,0,.2,1);
+}
+.form-fill-hint {
+  text-align:center; font-size:12px; line-height:1.5; color:#6a6a62;
+  margin:0 20px 18px; min-height:18px;
+  transition:color .25s;
+}
+.form-fill-hint.done { color:#5DCAA5; }
 .form-card { padding:20px; }
 .form-section-title {
   font-size:13px; font-weight:600; color:#5DCAA5;

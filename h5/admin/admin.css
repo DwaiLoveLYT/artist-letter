@@ -478,6 +478,55 @@ select.input {
 .cl-bar.off .cl-btn { background:rgba(239,159,39,.22); color:#F5C97B; }
 .cl-bar.err .cl-btn { background:rgba(226,75,74,.22); color:#F5A9A9; }
 
+/* ===== 云端哨兵（线上体检）=====
+   设计取舍：正常时**尽量轻**——它就是一行小字，不能长期占着订单列表的地方。
+   出问题时才变成显眼的红条。因为老板每天看的是订单，不是健康报告。 */
+.pt-bar {
+  display:flex; align-items:center; gap:7px;
+  margin:8px 0 2px; padding:8px 11px; border-radius:9px;
+  font-size:11.5px; cursor:pointer; user-select:none;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+}
+.pt-bar:active { background:rgba(255,255,255,.06); }
+.pt-dot {
+  width:7px; height:7px; border-radius:50%; flex:0 0 auto;
+  background:#5DCAA5; box-shadow:0 0 6px rgba(93,202,165,.6);
+}
+.pt-t { color:#9c9b94; font-weight:600; }
+.pt-age { color:#6e6d67; flex:1 1 auto; text-align:right; font-size:10.5px; }
+.pt-more { color:#7f7e78; font-size:10.5px; padding-left:2px; }
+.pt-bar.warn { background:rgba(239,159,39,.09); border-color:rgba(239,159,39,.3); }
+.pt-bar.warn .pt-dot { background:#EF9F27; box-shadow:0 0 6px rgba(239,159,39,.7); }
+.pt-bar.warn .pt-t { color:#F5C97B; }
+.pt-bar.bad { background:rgba(226,75,74,.11); border-color:rgba(226,75,74,.34); }
+.pt-bar.bad .pt-dot { background:#E24B4A; box-shadow:0 0 7px rgba(226,75,74,.8); animation:pt-pulse 1.6s infinite; }
+.pt-bar.bad .pt-t { color:#F09595; }
+@keyframes pt-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+.pt-bad-list { margin:6px 0 2px; padding:0 11px; }
+.pt-bad-row {
+  font-size:11px; line-height:1.6; color:#c8a3a3; padding:5px 0;
+  border-bottom:1px solid rgba(226,75,74,.13);
+}
+.pt-bad-row:last-child { border-bottom:none; }
+.pt-bad-row b { color:#F09595; display:block; font-size:11.5px; margin-bottom:1px; }
+
+.pt-note { font-size:10.5px; color:#6e6d67; margin:6px 0 2px; padding-left:2px; }
+
+/* 明细弹层 */
+.pt-explain {
+  font-size:12.5px; line-height:1.8; color:#a9a8a1;
+  background:rgba(93,202,165,.07); border-left:2px solid rgba(93,202,165,.5);
+  padding:10px 12px; border-radius:0 8px 8px 0; margin:12px 0;
+}
+.pt-explain b { color:#5DCAA5; }
+.pt-meta { font-size:11px; color:#6e6d67; margin:10px 0; }
+.pt-rows { margin:12px 0 16px; }
+.pt-row { padding:9px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+.pt-row:last-child { border-bottom:none; }
+.pt-row-h { font-size:12.5px; font-weight:600; color:#c9c8c2; }
+.pt-row-d { font-size:11.5px; line-height:1.6; color:#8d8c85; margin-top:3px; }
+
 /* 云端还没核对成功时的隔离告示。
    注意：它**不遮挡**下面的台账 —— 离线时也要能看见本机已有的单。
    隔离靠这条告示 + 每张未上云卡片上的「本机」标签，而不是靠藏起来。 */

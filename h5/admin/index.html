@@ -26,12 +26,15 @@
 
   <div class="wrap">
 
+    <!-- 云端鉴权先于台账：同一个微信浏览器里的本机订单不能冒充跨设备同步成功 -->
+    <div id="cloud-bar"></div>
+    <div id="cloud-gate" role="alert" style="display:none;"></div>
+    <div id="ledger-content">
     <!-- 待办看板 -->
     <div class="board" id="board"></div>
 
     <!-- 备份提醒：台账只住在浏览器里，久没导出就主动喊一声 -->
     <div id="backup-nudge"></div>
-    <div id="cloud-bar"></div>
 
     <!-- 新建订单 -->
     <button class="btn-full" style="margin-bottom:12px;" onclick="openNewOrder()">＋ 新建订单（粘贴客户信息）</button>
@@ -74,7 +77,8 @@
       <div class="empty-sub">换个筛选条件，或清空搜索词</div>
     </div>
 
-    <div class="footer-note">台账同时存在本机与服务端 · 换设备登录后填一次同步密钥即可看到全部订单</div>
+    <div class="footer-note">只有云端同步成功，才算看到了跨设备订单 · 每台设备须单独填一次同步密钥</div>
+    </div><!-- /ledger-content -->
   </div>
 </div>
 

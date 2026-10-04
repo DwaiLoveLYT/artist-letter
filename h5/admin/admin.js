@@ -780,9 +780,15 @@ function doWipePin(){
   toast('已清空密码，请重设')
 }
 
+// 进门之后他有没有动过手 —— 用来决定还要不要自动弹「填同步密钥」。
+// 只有进门之后才算数（unlock() 里会清零），否则连输密码那几下也会被算进去。
+let appTouched = false
+document.addEventListener('pointerdown', () => { appTouched = true }, true)
+
 function unlock(){
   document.getElementById('lock').style.display = 'none'
   document.getElementById('app').style.display  = 'block'
+  appTouched = false        // 从「这一刻」开始算他动没动过手（见 unlock 末尾的自动弹层）
   renderBoard(); renderChips(); renderList()
   // 进门就去拉一次云端 —— 客户在别的设备上下的单，这一步才会出现在台账里。
   // 拉失败不影响任何本地功能，只是顶栏会提示。
@@ -799,7 +805,20 @@ function unlock(){
   let skipped = false
   try { skipped = localStorage.getItem(CLOUD_SKIP_STORE) === '1' } catch(e){}
   if(!cloudKey && !skipped){
-    setTimeout(() => { if(!cloudKey) openCloudKey() }, 700)
+    setTimeout(() => {
+      if(cloudKey) return
+      // ⚠ 他要是已经自己点开了别的面板（正在「新建订单」粘客户信息），就别弹 ——
+      // openSheet 是同一个容器，弹出来会**把他正在填的东西直接顶掉**。
+      // 这个坑是线上全量测试抓到的：进后台后 700ms 内点「新建订单」，
+      // 粘贴框刚出来就被密钥面板替换，`#paste-box` 直接消失。
+      const sh = document.getElementById('sheet')
+      if(sh && sh.classList.contains('on')) return
+      // 同一个道理的更一般情况：进门之后他只要动过手，就说明已经在干活了。
+      // 这一刻弹一个「请填密钥」出来，只会打断他 —— 顶栏那条告示一直都在，
+      // 他需要的时候自己会点。
+      if(appTouched) return
+      openCloudKey()
+    }, 700)
   }
 }
 

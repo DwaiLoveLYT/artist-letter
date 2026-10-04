@@ -51,6 +51,12 @@ function copyContactWx(){ copyText(wxId()) }
 const RECEIVE_ADDR = '中国广东省深圳市南山区泉园路61号绿茵丰和，直接放东门保安室。188888888'
 const PAY_QR = 'images/pay-qr.jpg'
 
+// ⚠ 收款二维码开关：默认 false。
+// 上传到自己图床的真实微信收款码之后，把这个改成 true。
+// 默认是 false 的原因：占位图/模板图会让客户扫了把钱付给别人 ——
+// 这是「钱付错了人」的不可逆事故，所以新装/换图必须**显式**打开。
+const PAY_QR_READY = false
+
 // ==================== 状态机 ====================
 const STATUS_FLOW = [
   { key:'created', label:'已提交，待付款', hint:'订单已生成，请按页面提示完成付款。' },
@@ -377,6 +383,7 @@ async function shareOrderInfo(){
 // 客户填了备注，钱一到账就能直接对上单，不用来回问「你是谁」。
 function payGuideHtml(o){
   const t = o.order_no.slice(-4)
+  const wx = wxId()
   return `
     <div class="card pay-card">
       <div class="pay-card-top">
@@ -390,25 +397,60 @@ function payGuideHtml(o){
         <button class="btn btn-large pay-tail-btn" onclick="copyText('${t}')">复制这 4 位</button>
       </div>
 
-      <div class="pay-why">填上这 4 位，我一看到账就知道钱是你付的。<b>但订单内容我这边看不到</b> —— 所以付款后还有第 ② 步。</div>
+      <div class="pay-why">填上这 4 位，我一看到账就知道钱是你付的。</div>
 
-      <div class="pay-or"><span>然后扫码付款</span></div>
+      <div class="pay-methods">
 
-      <div class="qr-wrap">
-        <img class="qr-img" src="${PAY_QR}" alt="收款码" onclick="previewImage(this.src)" onerror="qrFail(this)">
-        <div class="qr-tip">长按识别二维码付款<br>或保存图片 → 微信扫一扫 → 相册选图</div>
+        <div class="pay-method pay-method-primary">
+          <div class="pay-method-head">
+            <span class="pay-method-num">①</span>
+            <span class="pay-method-title">微信好友转账（推荐）</span>
+          </div>
+          <div class="pay-wx-row">
+            <div class="pay-wx-label">今天找</div>
+            <div class="pay-wx-id">${wx}</div>
+            <button class="contact-copy" onclick="copyText('${wx}')">复制</button>
+          </div>
+          <div class="pay-method-foot">微信 → 搜索上面的 ID → 转账 ¥190 → 备注 <b>${t}</b></div>
+        </div>
+
+        ${PAY_QR_READY ? `
+        <div class="pay-method">
+          <div class="pay-method-head">
+            <span class="pay-method-num">②</span>
+            <span class="pay-method-title">微信扫码付款（备用）</span>
+          </div>
+          <div class="qr-wrap">
+            <img class="qr-img" src="${PAY_QR}" alt="收款码" onclick="previewImage(this.src)" onerror="qrFail(this)">
+            <div class="qr-tip">长按识别二维码付款<br>或保存图片 → 微信扫一扫 → 相册选图</div>
+          </div>
+        </div>
+        ` : `
+        <div class="pay-method pay-method-disabled">
+          <div class="pay-method-head">
+            <span class="pay-method-num">②</span>
+            <span class="pay-method-title">微信扫码付款</span>
+            <span class="pay-method-tag">维护中</span>
+          </div>
+          <div class="pay-method-disabled-d">
+            收款二维码暂时无法使用 —— 请用上方「好友转账」完成付款，<br>
+            备注里填好那 4 位就行。
+          </div>
+        </div>
+        `}
+
       </div>
 
       <button class="btn-ghost" onclick="copyReceipt('${o.id}')">复制「已转账」回执发给客服</button>
 
-      <!-- 第 ② 步不能少：订单只存在客户这台设备上，我这边没有。
-           放进付款卡里，客户不会漏看 —— 漏看就等于我收了钱不知道是谁的单。 -->
+      <!-- 第 ③ 步：服务器到没看到取决于云端同步。
+           同步成功会自动降级下面那条琥珀色警告（见 syncOrderToCloud）。 -->
       <div class="pay-handoff">
-        <div class="pay-handoff-h">② 付完款，把订单信息发我一次</div>
+        <div class="pay-handoff-h">③ 付完款，把订单信息发我一次（兜底）</div>
         <div class="pay-handoff-d">
-          订单只存在你这台设备的浏览器里，<b>我这边看不到</b>。<br>
-          点一下，选微信发给我就行，不用一条条打 ——
-          我收到这一段，你的单就直接进我这边了。
+          服务端那边有没有收到取决于同步有没有成功（页面下方会显示）。
+          <b>没看到「已经直接送到我这边了」</b>，就把订单信息复制发我一次；
+          <b>看到了</b>，可以跳过这一步。
         </div>
         <button class="btn btn-large" onclick="shareOrderInfo()">发给客服（一键分享）</button>
         <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>
@@ -474,6 +516,7 @@ function renderTrack(){
   const listEl=document.getElementById('track-list')
   const emptyEl=document.getElementById('track-empty')
   const warnEl=document.getElementById('track-warn')
+  const localHead=document.getElementById('track-local-head')
 
   if(warnEl){
     warnEl.innerHTML = storageOK() ? '' :
@@ -483,8 +526,14 @@ function renderTrack(){
       + '加微信 <b>' + wxId() + '</b> 查进度。</div>'
   }
 
-  if(!orders.length){ listEl.innerHTML=''; emptyEl.style.display='block'; return }
+  if(!orders.length){
+    listEl.innerHTML=''
+    emptyEl.style.display='block'
+    if(localHead) localHead.style.display='none'      // 没本机单就别挂这个标题
+    return
+  }
   emptyEl.style.display='none'
+  if(localHead) localHead.style.display='block'
   listEl.innerHTML=orders.map(o=>{
     const pending = o.addr_lookup && !String(o.recipient_addr||'').trim()
     return `
@@ -496,6 +545,57 @@ function renderTrack(){
       ${pending?`<div class="track-pending">📍 地址我在查，查到会更新到这里，不用催</div>`:''}
     </div>`
   }).join('')
+}
+
+// 换设备查订单：输订单号 + 手机号后 4 位
+//
+// 边界：
+//   - 服务端对「不存在的订单号」和「手机号不匹配」返回同一个 404（不泄漏存在性）；
+//   - 这里就把所有 404 都显示成「没找到」；
+//   - 服务端 503 = 仓库暂时打不通，诚实说「现在查不到，再试一次」而不是给假数据。
+async function lookupOrder(){
+  const noEl = document.getElementById('lookup-no')
+  const phEl = document.getElementById('lookup-phone')
+  const out  = document.getElementById('lookup-result')
+  if(!noEl || !phEl || !out) return
+
+  const no   = String(noEl.value || '').trim().toUpperCase()
+  const phRaw = String(phEl.value || '').replace(/\D/g, '')
+  if(!/^AL\d{8}[A-Z0-9]{6}$/.test(no)){
+    out.innerHTML = '<div class="lookup-err">订单号格式看着不对 —— 应该是 AL 开头、14 位的</div>'
+    return
+  }
+  if(phRaw.length !== 4){
+    out.innerHTML = '<div class="lookup-err">填一下下单用的手机号<b>后 4 位</b></div>'
+    return
+  }
+
+  out.innerHTML = '<div class="lookup-loading">查询中…</div>'
+
+  if(!window.Cloud || !Cloud.on()){
+    out.innerHTML = '<div class="lookup-err">没启用云端同步 —— 没法跨设备查。请在「首页底部」按客服微信问进度。</div>'
+    return
+  }
+  const r = await Cloud.lookupOrder(no, phRaw).catch(() => null)
+  if(r && r.ok && r.order){
+    const o = r.order
+    out.innerHTML = `
+      <div class="lookup-hit">
+        <div class="lookup-hit-head">查到了 ✓ 这是你的单</div>
+        <div class="row"><div class="row-key">订单号</div><div class="row-val">${escapeHtml(o.order_no)}</div></div>
+        <div class="row"><div class="row-key">艺人</div><div class="row-val">${escapeHtml(o.artist)}</div></div>
+        <div class="row"><div class="row-key">状态</div><div class="row-val"><span class="${tagClass(o.status)}">${statusLabel(o.status)}</span></div></div>
+        <div class="row"><div class="row-key">下单时间</div><div class="row-val">${fmtTimeHuman(o.created_at)}</div></div>
+        <div class="row"><div class="row-key">更新时间</div><div class="row-val">${fmtTimeHuman(o.updated_at || o.created_at)}</div></div>
+      </div>`
+    return
+  }
+  if(r && r.status === 503){
+    out.innerHTML = '<div class="lookup-err">现在查不到（同步服务暂时不通），稍等再试一次</div>'
+    return
+  }
+  // 404 / 网络 / 其他 —— 一律说「没找到」，不暴露技术细节
+  out.innerHTML = '<div class="lookup-err">没找到这一单 —— 检查一下订单号和手机号后 4 位对不对</div>'
 }
 
 // ==================== 订单详情 ====================

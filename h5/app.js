@@ -344,24 +344,80 @@ function stampText(ts){
 // 服务端是先落盘再回话的，所以 ok:true 就是真的收到了。
 // 没收到（服务没开 / 网络不通 / 报错）就什么都不改 —— 上面那句琥珀色警告原样留着，
 // 客户照旧会发我一次。宁可多发一遍，也不能出现「客户以为我收到了、其实没有」。
+//
+// 推送本身带 3 次重试（见 cloud.js），最终失败会落进一个持久队列，
+// 之后每次打开页面 / 回到前台 / 联网都会自动补推 ——
+// 所以「点了下单、那一瞬间网络抖了一下」不会再让这一单永久消失。
+function setCloudState(kind, r){
+  const st = document.getElementById('cloud-state')
+  if(!st) return
+  if(kind === 'pending'){
+    st.innerHTML = '<div class="cloud-pending">正在把你的订单直接送到我这边…</div>'
+    return
+  }
+  if(kind === 'ok'){
+    st.innerHTML = '<div class="cloud-ok">✓ 已经直接送到我这边了 —— 这一单不用再发一遍</div>'
+    return
+  }
+  if(kind === 'queued'){
+    st.innerHTML = '<div class="cloud-warn">⚠️ 这一单暂时没送出去，已经排上队了 —— '
+      + '网络一好会自动补发。<b>保险起见，还是点上面那个「发给客服」发我一次。</b></div>'
+    return
+  }
+  st.innerHTML = '<div class="cloud-warn">⚠️ 没能直接送到我这边（'
+    + escapeHtml(cloudWhy(r)) + '）。<b>请点上面那个「发给客服」把订单信息发我一次。</b></div>'
+}
+
+function cloudWhy(r){
+  if(!r) return '未知原因'
+  if(r.net) return '网络不通'
+  if(r.off) return '同步未开启'
+  if(r.status === 429) return '请求太频繁'
+  if(r.status >= 500) return '服务端暂时不可用'
+  return r.error ? String(r.error) : '服务端没确认'
+}
+
 function syncOrderToCloud(order){
   if(!window.Cloud || !Cloud.on()) return
+  setCloudState('pending')
   Cloud.pushOrder(order).then(r => {
-    if(!(r && r.ok)) return
-    updOrder(order.id, { cloud_at: Date.now() })
-
-    const st = document.getElementById('cloud-state')
-    if(st){
-      st.innerHTML = '<div class="cloud-ok">✓ 已经直接送到我这边了 —— 这一单不用再发一遍</div>'
+    if(r && r.ok){
+      updOrder(order.id, { cloud_at: Date.now() })
+      setCloudState('ok')
+      const tip = document.getElementById('save-tip')
+      if(tip){
+        // 警告降级成提示：它警告的那件事（我看不到）已经不成立了。
+        tip.className = 'save-tip'
+        tip.innerHTML = '订单号已经记在你这台设备上，也同步给我了。<br>'
+          + '想留个底就截个图 —— 换手机、清缓存后本地这份会没，但我这边有。'
+      }
+      return
     }
+    // 落队列了：文案要说清「已经排上队」，而不是让客户以为彻底失败了
+    setCloudState(Cloud.pending && Cloud.pending() > 0 ? 'queued' : 'fail', r)
+  })
+}
+
+// 队列补推成功时，把成功页那句话也改过来（客户可能还停在这一页）
+window.__onPushFlushed = function(r){
+  if(!lastOrderId) return
+  const o = getOrder(lastOrderId)
+  if(!o || o.cloud_at) return
+  if(o.order_no && Cloud.pending && Cloud.pending() === 0){
+    updOrder(lastOrderId, { cloud_at: Date.now() })
+    setCloudState('ok')
     const tip = document.getElementById('save-tip')
     if(tip){
-      // 警告降级成提示：它警告的那件事（我看不到）已经不成立了。
       tip.className = 'save-tip'
       tip.innerHTML = '订单号已经记在你这台设备上，也同步给我了。<br>'
         + '想留个底就截个图 —— 换手机、清缓存后本地这份会没，但我这边有。'
     }
-  })
+  }
+}
+
+// 地址自愈了：如果客户正停在成功页，状态条要跟着更新
+window.__onCloudBaseHealed = function(d){
+  if(window.Cloud && Cloud.on()) setCloudState('pending')
 }
 function copyOrderInfo(){ const o=getOrder(lastOrderId); if(!o)return; copyText(orderInfoText(o)) }
 // 截图要翻相册、还会被清；复制一下才是真能用的保存方式

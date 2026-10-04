@@ -195,6 +195,11 @@ button { cursor:pointer; border:none; background:none; color:inherit; }
 .tag.green { background:rgba(93,202,165,.14); color:#5DCAA5; }
 .tag.amber { background:rgba(239,159,39,.14); color:#EF9F27; }
 .tag.sage  { background:rgba(138,154,143,.16); color:#9fb0a4; }
+/* 「本机」：这一单本次没在云端核对到 —— 看得见，但不能当成云端已确认。 */
+.tag.local {
+  background:transparent; color:#c8a15e;
+  border:1px dashed rgba(200,161,94,.55);
+}
 
 .o-meta { font-size:12.5px; color:#77766f; margin-top:9px; line-height:1.75; }
 .o-meta b { color:#a5a49f; font-weight:500; }
@@ -438,6 +443,18 @@ select.input {
 .cl-btn.ghost { flex:0 0 auto; background:transparent; border:1px solid rgba(255,255,255,.16); color:#a9a8a1; }
 .cl-bar.off .cl-btn { background:rgba(239,159,39,.22); color:#F5C97B; }
 .cl-bar.err .cl-btn { background:rgba(226,75,74,.22); color:#F5A9A9; }
+
+/* 云端还没核对成功时的隔离告示。
+   注意：它**不遮挡**下面的台账 —— 离线时也要能看见本机已有的单。
+   隔离靠这条告示 + 每张未上云卡片上的「本机」标签，而不是靠藏起来。 */
+#cloud-gate {
+  margin:16px 0; padding:20px 16px; border:1px solid rgba(239,159,39,.38);
+  border-radius:14px; background:rgba(239,159,39,.10); color:#dedbd2;
+}
+#cloud-gate h2 { font-size:18px; line-height:1.4; color:#f2c679; margin:0 0 12px; }
+#cloud-gate p { font-size:13px; line-height:1.8; color:#d5c9b3; margin:0 0 14px; }
+#cloud-gate b { color:#f2c679; }
+#cloud-gate .btn-full { margin-top:8px; }
 
 /* 诊断面板里的请求留痕。
    等宽 + 可横向滚动：这些是原始记录，对齐比好看重要。 */

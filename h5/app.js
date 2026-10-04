@@ -126,7 +126,11 @@ let lastOrderId=''
 function goPage(name, param){
   if(name==='detail' && param){ renderDetail(param); lastOrderId=param }
   if(name==='track') renderTrack()
-  if(name==='order') restoreProfile()      // 回头客：自动带出上次填过的信息
+  if(name==='order'){
+    restoreProfile()      // 回头客：自动带出上次填过的信息
+    bindFormProgress()    // 进度条跟着已填项走（restoreProfile 带出来的也算）
+    updateFormProgress()
+  }
 
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
   const page=document.getElementById('page-'+name)
@@ -195,6 +199,7 @@ function setLetterSource(el){
   el.classList.add('on')
   document.getElementById('proxy-note-box').style.display=letterSource==='proxy'?'block':'none'
   document.getElementById('self-note-box').style.display=letterSource==='self'?'block':'none'
+  updateFormProgress()          // 选了「代写」会多出一项必填，进度得跟着变
 }
 
 function toggleAddrLookup(){
@@ -213,6 +218,7 @@ function toggleAddrLookup(){
   hint.innerText=addrLookup
     ? '已记下：这一单的地址由我帮你查，查到后会更新在「我的订单」'
     : '不知道精确地址就填城市或国家，我负责帮你查最新的'
+  updateFormProgress()          // 勾上之后「收信地址」就不算缺项了
 }
 // 这是个 div，键盘用户也得能操作
 function lookupKey(e){
@@ -718,6 +724,67 @@ function fieldError(id, msg){
   setTimeout(()=>el.classList.remove('field-error'), 2400)
 }
 
+// ==================== 填写进度 ====================
+// 长表单最劝退的不是「要填很多」，而是「不知道还剩多少」。
+// 这里把必填项摊开成一份清单，实时算完成度 —— 和 submitOrder 的校验口径保持一致，
+// 免得出现「进度条满了但提交还是被打回」这种最伤信任的情况。
+function formRequirements(){
+  const val = id => { const el=document.getElementById(id); return el ? el.value.trim() : '' }
+  const need = [
+    { id:'o-artist',    label:'艺人姓名', ok: !!val('o-artist') },
+    { id:'o-country',   label:'收信国家', ok: !!val('o-country') },
+    // 勾了「帮我查地址」就不算缺 —— 这正是那个开关的意义
+    { id:'o-recipient', label:'收信地址', ok: !!val('o-recipient') || addrLookup },
+    { id:'o-phone',     label:'手机号',   ok: /^[\d\s+()\-]{6,}$/.test(val('o-phone')) },
+    { id:'o-return',    label:'回信地址', ok: !!val('o-return') },
+  ]
+  if(letterSource==='proxy') need.push({ id:'o-note-proxy', label:'代写要点', ok: !!val('o-note-proxy') })
+  return need
+}
+
+function updateFormProgress(){
+  const fill=document.getElementById('fp-fill')
+  const cnt=document.getElementById('fp-count')
+  const hint=document.getElementById('fp-hint')
+  if(!fill || !cnt || !hint) return          // 不在这一页，静默跳过
+
+  const need=formRequirements()
+  const done=need.filter(n=>n.ok).length
+  const total=need.length
+  fill.style.width=(total?Math.round(done/total*100):0)+'%'
+  cnt.textContent=done+'/'+total
+
+  if(done===total){
+    hint.textContent='信息齐了，可以提交了'
+    hint.className='form-fill-hint done'
+  }else{
+    const miss=need.filter(n=>!n.ok).map(n=>n.label)
+    hint.textContent='还差 '+miss.length+' 项：'+miss.join(' · ')
+    hint.className='form-fill-hint'
+  }
+}
+
+// 只在初始化时挂一次监听，别在每次进页面时重复挂 —— 那会越挂越多
+let formProgressBound=false
+function bindFormProgress(){
+  if(formProgressBound) return
+  formProgressBound=true
+  // 注意这行结尾的分号不能省：省掉的话下一行的 `[` 会被当成
+  // `true['o-artist',...]` 的下标访问（ASI 陷阱），运行时直接报
+  // 「Cannot read properties of undefined (reading 'forEach')」。
+  const ids=['o-artist','o-country','o-recipient','o-phone','o-return','o-note-proxy','o-note-self'];
+  ids.forEach(id=>{
+    const el=document.getElementById(id)
+    if(!el) return
+    el.addEventListener('input', updateFormProgress)
+    el.addEventListener('change', updateFormProgress)
+  })
+  // 页面从后台切回来时补算一次：手机上切出去接了个电话回来，状态不能是旧的
+  window.addEventListener('pageshow', updateFormProgress)
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) updateFormProgress() })
+  updateFormProgress()
+}
+
 // ==================== 启动 ====================
 // 顶部信任条是吸顶的，页面导航栏也吸顶。两条都 top:0 就会叠在一起，
 // 把返回键压在下面。这里实测信任条高度写进 CSS 变量，让导航栏贴在它下面。
@@ -731,6 +798,7 @@ function syncTrustBarHeight(){
 window.addEventListener('DOMContentLoaded',()=>{
   syncTrustBarHeight()
   initHome()
+  bindFormProgress()
   goPage('home')
 })
 window.addEventListener('resize', syncTrustBarHeight)

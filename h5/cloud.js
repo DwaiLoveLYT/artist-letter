@@ -13,12 +13,14 @@
 // 实测从深圳访问：DNS 0.004s / 连接 0.007s / 总计 0.28s，解析到腾讯云。
 //
 // ⚠ 这个地址是**发布时生成**的：每次重新发布同一个应用，分享链接都会变。
-// 已实测连续七次：83cf23c6… → 25dafc60… → 45c34785… → 6eaa80f7… → a3117d63… → 8f1cf1e0… → ae1556c6…
-// （旧地址直接返回一张营销页）。所以**每次重新发布之后，必须把新地址更新到这里
-// 并重推一次 GitHub Pages**（用 letter-api/set-endpoint.js 一条命令改完四处），
-// 否则线上客户页会连到一个死地址 —— 而本地测试完全发现不了这件事
-// （本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE_DEFAULT = 'https://ded7b397c233463db660c97742fdd8d1.sg2.agentos-app.run'
+// 已实测连续八次：83cf23c6… → 25dafc60… → 45c34785… → 6eaa80f7… → a3117d63… → 8f1cf1e0… → ae1556c6… → ded7b397… → 9cd100e7…
+// （旧地址直接返回一张营销页）。
+//
+// ★ 好消息：现在已经**不需要手工改这里**了。后端会把自己当前的地址
+//   自动写进公开仓库的 endpoint.json（见 letter-api/_addrpub.js），
+//   页面发现下面这个常量连不通时，会自己去读那份、并换过去。
+//   所以这一行只是「第一顺位」，不是唯一依靠 —— 忘了更新它也不会让客户下单失败。
+var CLOUD_BASE_DEFAULT = 'https://9cd100e7beb04d608ae12c7fcb248b63.sg2.agentos-app.run'
 var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
 // —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——

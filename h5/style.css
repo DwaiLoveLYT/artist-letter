@@ -71,6 +71,23 @@ body {
   border:1px solid rgba(93,202,165,0.28);
 }
 
+/* 正在推送 / 推送失败。
+   失败那条必须**把客户推回兜底通道**（发给客服），
+   所以文案里那半句加粗、颜色更亮 —— 它才是这一屏真正要他做的动作。 */
+.cloud-pending {
+  margin-top:12px; padding:9px 12px; border-radius:9px;
+  font-size:12.5px; line-height:1.6; color:#a9a9a2;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.1);
+}
+.cloud-warn {
+  margin-top:12px; padding:9px 12px; border-radius:9px;
+  font-size:12.5px; line-height:1.7; color:#d8b98a;
+  background:rgba(214,158,74,0.09);
+  border:1px solid rgba(214,158,74,0.26);
+}
+.cloud-warn b { color:#e8c48f; }
+
 /* 付款卡里的第 ② 步：把订单信息发我。
    放在付款卡内部（而不是另起一张卡）—— 客户付完款就往下滑，
    同一张卡里就不会漏；漏了就等于我收了钱不知道是谁的单。 */

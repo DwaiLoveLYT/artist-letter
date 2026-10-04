@@ -208,6 +208,9 @@ async function cloudPull(silent){
   }
 
   renderList()
+  // 顺带拉一次云端体检结论。**不 await** —— 它跟订单同步是两件独立的事，
+  // 没有理由让「体检报告慢一点」拖住「订单列表已经可以看了」。
+  loadPatrol(false)
   // 读取和回写分离：这次只是「查看客户下过什么单」。
   // 不能把同一浏览器遗留的本机订单无提示地推上服务端（可能是旧测试单），
   // 更不能让它们冒充已经来自客户设备的订单；人工编辑另走 cloudTouch/cloudPush。
@@ -314,6 +317,11 @@ function renderCloudBar(){
   const box = document.getElementById('cloud-bar')
   if(!box) return
   renderCloudGate()
+  // 云端体检块固定渲染一次，**与同步处于哪种状态无关** ——
+  // 它的容器在 index.html 里，不归这条 bar 管。
+  // 放在函数最前面（而不是各分支里）是为了：任何一条分支 return，
+  // 它都已经渲染好了。同步挂了也照样要看得到「线上机器还好吗」。
+  renderPatrolStrip()
   if(!window.Cloud || !Cloud.on()){
     box.innerHTML = '<div class="cl-bar err"><div class="cl-main"><div class="cl-t">⚠ 目前只在这台浏览器保存订单，跨设备同步未开启</div>'
       + '<div class="cl-d">同一个微信号也不会让本机订单自动出现在其他设备。请检查这台设备的同步地址。</div></div></div>'
@@ -381,6 +389,120 @@ function renderCloudBar(){
       <button class="cl-btn" onclick="cloudPull()">${diff ? '强制同步' : '立即同步'}</button>
       <button class="cl-btn ghost" onclick="openCloudDiag()">诊断</button>
     </div>`
+}
+
+// ==================== 云端哨兵（线上体检） ====================
+//
+// 为什么后台要放这个：
+// 老板的电脑会关机，GitHub 的定时巡检又因为权限问题跑不起来。
+// 所以巡检改在**云端服务自己**里做 —— 它跟服务器一起活，
+// 老板关不关机、在不在电脑前，跟它一点关系都没有。
+//
+// 这一块就是那份体检结论的展示面。
+// 设计取舍：**默认不打扰**。正常情况下它只是一行很轻的字；
+// 只有真的有问题时才变成一块显眼的红条 —— 因为老板每天要看的订单列表
+// 不该被一行「一切正常」长期占着地方。
+let patrolData = null
+let patrolBusy = false
+
+async function loadPatrol(force){
+  if(!window.Cloud || !Cloud.on() || !cloudKey) return
+  if(patrolBusy) return
+  patrolBusy = true
+  try {
+    const r = await Cloud.patrol(cloudKey, !!force)
+    if(r && r.ok){ patrolData = r.patrol || null; lastPatrolNote = '' }
+    else if(r && r.status === 404){ patrolData = null; lastPatrolNote = '服务端还没有这个功能（版本较旧）' }
+    else if(r && r.net){ lastPatrolNote = '这次没读到' }
+    else { lastPatrolNote = (r && r.error) ? String(r.error) : '这次没读到' }
+  } catch(e){
+    lastPatrolNote = '这次没读到'
+  }
+  patrolBusy = false
+  renderPatrolStrip()
+}
+let lastPatrolNote = ''
+
+function renderPatrolStrip(){
+  const box = document.getElementById('patrol-strip')
+  if(!box) return
+  if(!patrolData){
+    // 没结论时不占地方，只在服务端版本太旧时给一句解释
+    box.innerHTML = lastPatrolNote
+      ? '<div class="pt-note">云端体检：' + esc(lastPatrolNote) + '</div>'
+      : ''
+    return
+  }
+  const p = patrolData
+  const age = Math.max(0, Math.round((Date.now() - (p.at || 0)) / 60000))
+  const ageTxt = age < 1 ? '刚刚' : (age < 60 ? age + ' 分钟前' : Math.round(age / 60) + ' 小时前')
+
+  // 结论太久没更新 = 哨兵可能停了。这是**比检查内容更重要**的信号：
+  // 一个不吭声的哨兵会让人以为「没事」，而它可能只是死了。
+  const stale = age > 150
+  const level = stale ? 'fail' : (p.level || 'ok')
+
+  if(level === 'ok'){
+    // 正常：一行轻描淡写的字 + 一个可点开看明细的入口
+    box.innerHTML = `
+      <div class="pt-bar ok" onclick="openPatrolDetail()">
+        <span class="pt-dot"></span>
+        <span class="pt-t">线上一切正常</span>
+        <span class="pt-age">${esc(ageTxt)}体检 · 云端每 1 小时自动查一次</span>
+        <span class="pt-more">明细</span>
+      </div>`
+    return
+  }
+
+  // 有问题：变红，并把「到底是什么事」直接写在条上 —— 不让老板再点一次才知道
+  const bad = (p.checks || []).filter(c => c.level !== 'ok')
+  const head = stale
+    ? '云端体检汇报太久没更新了（' + ageTxt + '，正常应每小时一次）'
+    : (p.summary || '云端体检发现问题')
+  box.innerHTML = `
+    <div class="pt-bar ${level === 'fail' ? 'bad' : 'warn'}" onclick="openPatrolDetail()">
+      <span class="pt-dot"></span>
+      <span class="pt-t">${esc(head)}</span>
+      <span class="pt-age">${esc(ageTxt)}体检</span>
+      <span class="pt-more">明细</span>
+    </div>
+    ${bad.length ? '<div class="pt-bad-list">' + bad.map(c =>
+        '<div class="pt-bad-row"><b>' + esc(c.name) + '</b>' + esc(c.detail) + '</div>').join('') + '</div>' : ''}`
+}
+
+function openPatrolDetail(){
+  const p = patrolData
+  if(!p) return
+  const age = Math.max(0, Math.round((Date.now() - (p.at || 0)) / 60000))
+  const ageTxt = age < 1 ? '刚刚' : (age < 60 ? age + ' 分钟前' : Math.round(age / 60) + ' 小时前')
+  const rows = (p.checks || []).map(c => {
+    const icon = c.level === 'ok' ? '✅' : (c.level === 'warn' ? '⚠️' : '❌')
+    return '<div class="pt-row"><div class="pt-row-h">' + icon + ' ' + esc(c.name) + '</div>'
+      + '<div class="pt-row-d">' + esc(c.detail) + '</div></div>'
+  }).join('')
+
+  openSheet(`
+    <div class="sh-title">线上体检报告</div>
+    <div class="sh-sub">${esc(p.summary || '')}</div>
+    <div class="pt-explain">
+      这份报告是<b>云端服务器自己</b>做的，每 1 小时一次。<br>
+      你的电脑关不关机、人在不在，都不影响它 —— 它跟你手机后台看订单一样，是云上的东西。
+    </div>
+    <div class="pt-meta">最近一次：${esc(ageTxt)}（${esc((p.at_iso || '').replace('T',' ').slice(0,16))} UTC）</div>
+    <div class="pt-rows">${rows || '<div class="hint">还没有明细</div>'}</div>
+    <button class="btn-full" onclick="runPatrolNow()">${patrolBusy ? '正在体检…' : '现在就体检一次'}</button>
+    <div class="hint" style="margin-top:8px;">每项都代表一件具体的事：数据在不在、页面能不能打开、下单能不能送到。
+    全绿说明线上这几条链路在体检的那一刻都是通的。</div>
+  `)
+}
+
+async function runPatrolNow(){
+  if(patrolBusy) return
+  patrolBusy = true
+  closeSheet()
+  toast('正在做体检…')
+  await loadPatrol(true)
+  setTimeout(openPatrolDetail, 150)
 }
 
 // ==================== 云端同步诊断 ====================
@@ -2348,3 +2470,20 @@ document.addEventListener('DOMContentLoaded', () => {
   initLock()
   document.getElementById('recon').addEventListener('keydown', e => { if(e.key === 'Enter') doReconcile() })
 })
+
+// ==================== 测试挂载点（只给自动化测试用）====================
+// 为什么需要它：云端哨兵这块 UI 的三种形态（绿/黄红/结论太旧）**没法在线上人为制造** ——
+// 总不能让真的后端故意坏掉来验证界面。所以必须能在浏览器里直接喂一份数据进去，
+// 看它渲染成什么样（见 letter-api/test-patrol-ui.js）。
+//
+// 名字带 __test 前缀，且只做「塞数据 + 重绘」这一件事，不碰任何业务状态。
+window.__testSetPatrol = function(p){
+  patrolData = p || null
+  lastPatrolNote = p ? '' : ''
+  renderPatrolStrip()
+}
+window.__testSetPatrolNote = function(t){
+  patrolData = null
+  lastPatrolNote = t || ''
+  renderPatrolStrip()
+}

@@ -963,6 +963,17 @@ window.addEventListener('online', () => {
   if(cur && (cur.id === 'page-track' || cur.id === 'page-detail')) refreshMyOrders()
 })
 
+// 图加载完就把占位那层「呼吸」关掉。
+// 图是不透明的、已经盖在上面了，动画再跑就是白烧电 —— 手机上尤其明显。
+// load / error 都不冒泡，所以必须用捕获阶段（第三个参数 true）才收得到。
+;['load','error'].forEach(ev => {
+  document.addEventListener(ev, e => {
+    const t = e.target
+    if(!t || t.tagName !== 'IMG' || !t.classList) return
+    t.classList.add(ev === 'load' ? 'img-loaded' : 'img-failed')
+  }, true)
+})
+
 // ==================== 订单详情 ====================
 function renderDetail(id){
   const o=getOrder(id)
@@ -1021,7 +1032,7 @@ function renderDetail(id){
             const label = slot==='front'?'信封正面':'信封反面'
             return m ? `
               <div class="env-slot">
-                <img class="env-img" src="${mUrl(m)}" onclick="previewImage('${mUrl(m)}')" alt="${label}">
+                <img class="env-img" src="${mUrl(m)}" loading="lazy" decoding="async" onclick="previewImage('${mUrl(m)}')" alt="${label}">
                 <div class="env-label">${label}</div>
               </div>` : `
               <div class="env-slot empty">
@@ -1035,14 +1046,17 @@ function renderDetail(id){
     ${imgs.length?`
       <div class="card">
         <div class="card-title">制作过程</div>
-        <div class="gallery">${imgs.map(m=>`<img class="gallery-img" src="${mUrl(m)}" onclick="previewImage('${mUrl(m)}')">`).join('')}</div>
+        <div class="gallery">${imgs.map(m=>`<img class="gallery-img" src="${mUrl(m)}" loading="lazy" decoding="async" onclick="previewImage('${mUrl(m)}')">`).join('')}</div>
         <div class="tiny" style="margin-top:8px;">点击可放大查看</div>
       </div>
     `:''}
     ${vid?`
       <div class="card">
         <div class="card-title">投递视频</div>
-        <video class="media" style="height:200px;" src="${mUrl(vid)}" controls playsinline preload="metadata"></video>
+        <!-- 有封面就用封面：客户那边网慢（实测每连接约 45KB/s），
+             视频自己出第一帧要好几秒 —— 看着像加载不出来。
+             封面是几十 KB 的小图，卡片秒出；真正点开播放才去下视频。 -->
+        <video class="media" style="height:200px;" src="${mUrl(vid)}"${vid.poster && mUrl(vid.poster) ? ` poster="${mUrl(vid.poster)}"` : ''} controls playsinline preload="metadata"></video>
         <div class="tiny" style="margin-top:8px;">一镜到底，从信封到投进邮筒全程不剪辑</div>
       </div>
     `:''}

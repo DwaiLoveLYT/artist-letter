@@ -81,6 +81,8 @@ function healBase(){
       _healedFrom = _ovBase
       try { localStorage.removeItem('artist_letter_cloud_base') } catch(e){}
       CLOUD_BASE = CLOUD_BASE_DEFAULT
+      // 死地址修复后立即补推，不能等到下一次打开页面/45 秒轮询。
+      if(qSize()) setTimeout(autoFlush, 0)
       var detail = { from: _healedFrom, to: CLOUD_BASE_DEFAULT }
       try { window.dispatchEvent(new CustomEvent('cloud-base-healed', { detail: detail })) } catch(e){}
       if(typeof window.__onCloudBaseHealed === 'function'){
@@ -129,14 +131,15 @@ function qWrite(a){
   try {
     if(a && a.length) localStorage.setItem(PUSH_Q, JSON.stringify(a.slice(-80)))
     else localStorage.removeItem(PUSH_Q)
-  } catch(e){}
+    return true
+  } catch(e){ return false }
 }
 function qHas(no){ return qRead().some(function(o){ return o && o.order_no === no }) }
 function qAdd(order){
-  if(!order || !order.order_no) return
+  if(!order || !order.order_no) return false
   var a = qRead().filter(function(o){ return o && o.order_no !== order.order_no })
   a.push(order)
-  qWrite(a)
+  return qWrite(a) && qHas(order.order_no)
 }
 function qDrop(no){ qWrite(qRead().filter(function(o){ return o && o.order_no !== no })) }
 function qSize(){ return qRead().length }
@@ -150,6 +153,7 @@ var Cloud = {
   isOverridden: function(){ return !!(CLOUD_BASE && CLOUD_BASE !== CLOUD_BASE_DEFAULT) },
   healedFrom: function(){ return _healedFrom },
   pending: qSize,
+  hasPending: qHas,
 
   // —— 客户页：把订单送到服务端 ——
   // 失败**绝不能**影响下单流程：页面上的「发给客服（一键分享）」仍是兜底通道。
@@ -158,8 +162,12 @@ var Cloud = {
   // 传上去只会在合并时制造无意义的差异。
   _post: function(order){
     if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    // 微信上遇到半断开的网络时 fetch 可能一直挂着；有限超时后让队列补推，
+    // 页面才能明确给出「还没送达」，而不是永远显示「正在送达」。
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+    var timer = ctl ? setTimeout(function(){ ctl.abort() }, 18000) : null
     return fetch(CLOUD_BASE + '/api/order', {
-      method: 'POST',
+      method: 'POST', signal: ctl ? ctl.signal : undefined,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         order_no: order.order_no, artist: order.artist, country: order.country,
@@ -174,11 +182,16 @@ var Cloud = {
         return j
       })
     }).catch(function(){ return { ok:false, net:true } })
+      .then(function(r){ if(timer) clearTimeout(timer); return r })
   },
 
   // 带重试的推送。3 次、退避 0.6s / 1.6s —— 手机信号抖一下就过去的那种失败，
   // 用户完全无感；真不通才落进队列。
   pushOrder: function(order, opts){
+    // 先落持久队列，再启动网络请求。微信内置浏览器可能在 POST 尚未完成时就被关掉；
+    // 旧写法在 3 次尝试全部失败后才落队列，页面中途关闭会让服务端永远收不到单。
+    // 后端按 order_no 幂等，补推即使和第一次同时到达也不会重复建单。
+    qAdd(order)
     var o = opts || {}
     var tries = o.tries || 3
     var delays = [0, 600, 1600]
@@ -197,7 +210,12 @@ var Cloud = {
       })
     }
     return attempt(0).then(function(r){
-      if(!(r && r.ok)) qAdd(order)      // 最终失败 → 落队列，之后自动补推
+      // localStorage 被禁用/写满时 qAdd 会失败，不许谎报「已经排队」。
+      // 若中途另一个补推任务移除了队列，最后失败时补一次（后端按单号幂等）。
+      if(!(r && r.ok) && !qHas(order.order_no)){
+        if(!r) r = { ok:false, net:true }
+        r.queue_failed = !qAdd(order)
+      }
       return r
     })
   },

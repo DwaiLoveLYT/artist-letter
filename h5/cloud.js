@@ -18,7 +18,7 @@
 // 并重推一次 GitHub Pages**（用 letter-api/set-endpoint.js 一条命令改完四处），
 // 否则线上客户页会连到一个死地址 —— 而本地测试完全发现不了这件事
 // （本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE_DEFAULT = 'https://421b68cbbaa645ebb4ddc4f8a3452a55.sg2.agentos-app.run'
+var CLOUD_BASE_DEFAULT = 'https://ded7b397c233463db660c97742fdd8d1.sg2.agentos-app.run'
 var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
 // —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——
@@ -41,6 +41,77 @@ try { _ovBase = localStorage.getItem('artist_letter_cloud_base') } catch(e){}
 if(_ovBase !== null) CLOUD_BASE = _ovBase
 
 var _healedFrom = ''
+
+// —— 地址自动修复：后端换了地址，这里自己找回来 ——
+//
+// 为什么必须有这一段（这是「后端重新部署就出故障」的根治）：
+// 每次重新部署后端，平台都会给一个**全新域名**，上面那个内置常量就作废了。
+// 老做法是「部署完，手工改这个常量，再推一次 GitHub Pages，再等 CDN」——
+// 一串手工步骤，任何一步漏了或忘了等 CDN，线上就是这样：
+//   客户点提交 → 连到一个死地址 → 单子送不到。
+//
+// 现在改了：后端会**自己**把当前地址写进公开仓库（DwaiLoveLYT/artist-letter）的
+// endpoint.json 里（见 letter-api/_addrpub.js）。那个仓库是公开的，
+// 所以这里不需要任何密钥就能读。
+//
+// 于是修复链路全自动：
+//   内置地址死了 → 去公开仓库读当前地址 → 探一下确实是我们自己的服务 → 换过去
+// 客户和老板都不需要做任何事，也不会看到「同步失败」。
+//
+// ⚠ 顺序很重要：只在**当前地址确实不通**时才去读。
+// 不能每次都读 —— 那是额外的网络往返，而且会让「用哪个地址」变得不可预测。
+var ADDR_DISCOVERY_URL = 'https://raw.githubusercontent.com/DwaiLoveLYT/artist-letter/main/endpoint.json'
+
+// 读公开仓库里那份「当前地址」。返回 Promise<string|''>。
+//
+// 注意加 cache-busting 参数：raw.githubusercontent 有 CDN 缓存，
+// 不加的话刚发布的地址可能要等几分钟才读到 —— 而那几分钟正是最需要它的时候。
+function fetchPublishedAddr(){
+  var url = ADDR_DISCOVERY_URL + '?t=' + Date.now()
+  var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+  var timer = setTimeout(function(){ if(ctl) ctl.abort() }, 8000)
+  return fetch(url, { cache:'no-store', signal: ctl ? ctl.signal : undefined })
+    .then(function(r){
+      if(!r.ok) return ''
+      return r.json().catch(function(){ return null }).then(function(j){
+        // 必须是我们自己的服务发的，且地址格式对 ——
+        // 这个文件是公开可读的，万一被谁改了内容，也不能让页面把单子发到别人的服务器去。
+        if(!j || j.service !== 'artist-letter-api') return ''
+        var api = String(j.api || '')
+        if(!/^https:\/\/[0-9a-f]{32}\.sg2\.agentos-app\.run$/.test(api)) return ''
+        return api
+      })
+    })
+    .catch(function(){ return '' })
+    .then(function(v){ clearTimeout(timer); return v })
+}
+
+// 当**当前生效的地址**（不分来源）连不通时，尝试用公开仓库里那份把它换掉。
+// 返回 Promise<boolean>：true = 换成功了。
+function tryDiscoverAndHeal(){
+  return fetchPublishedAddr().then(function(found){
+    if(!found) return false
+    if(found === CLOUD_BASE) return false           // 就是现在这个，没得换
+    return probeBase(found).then(function(ok){
+      if(!ok) return false                          // 找到了但连不通 —— 不当它是解药
+      _healedFrom = CLOUD_BASE
+      CLOUD_BASE = found
+      // 顺手把 localStorage 里那个（可能是死的）覆盖值也更新掉 ——
+      // 不更新的话下次打开又要走一遍这个流程，而且旧覆盖值会一直「赢」过内置常量。
+      try { localStorage.setItem('artist_letter_cloud_base', found) } catch(e){}
+      if(qSize()) setTimeout(autoFlush, 0)
+      try {
+        window.dispatchEvent(new CustomEvent('cloud-base-healed', {
+          detail: { from: _healedFrom, to: found, via: 'published' },
+        }))
+      } catch(e){}
+      if(typeof window.__onCloudBaseHealed === 'function'){
+        try { window.__onCloudBaseHealed({ from: _healedFrom, to: found, via: 'published' }) } catch(e){}
+      }
+      return true
+    })
+  })
+}
 
 // 探测一个地址到底是不是「我们自己的服务」。
 //
@@ -70,25 +141,38 @@ function probeBase(url){
 }
 
 function healBase(){
-  if(_ovBase === null) return                    // 没设覆盖值，没什么可修
   if(_ovBase === '') return                      // 显式关闭同步 —— 故意的，别去「修好」它
-  if(_ovBase === CLOUD_BASE_DEFAULT) return
-  probeBase(_ovBase).then(function(ok){
-    if(ok) return                                  // 覆盖值是活的，尊重它
-    return probeBase(CLOUD_BASE_DEFAULT).then(function(ok2){
-      if(!ok2) return                              // 两个都不通 —— 是网络的问题，不是地址的问题
-      // 覆盖值已死、内置地址是活的 → 立刻自愈
-      _healedFrom = _ovBase
-      try { localStorage.removeItem('artist_letter_cloud_base') } catch(e){}
-      CLOUD_BASE = CLOUD_BASE_DEFAULT
-      // 死地址修复后立即补推，不能等到下一次打开页面/45 秒轮询。
-      if(qSize()) setTimeout(autoFlush, 0)
-      var detail = { from: _healedFrom, to: CLOUD_BASE_DEFAULT }
-      try { window.dispatchEvent(new CustomEvent('cloud-base-healed', { detail: detail })) } catch(e){}
-      if(typeof window.__onCloudBaseHealed === 'function'){
-        try { window.__onCloudBaseHealed(detail) } catch(e){}
-      }
-    })
+  // 分两种情形，**都要修**：
+  //   ① 用户设过覆盖值，且那个值死了 → 优先回到内置地址
+  //   ② 没设覆盖值（或覆盖值也没救），当前地址本身死了 → 去公开仓库问当前地址
+  // 情形 ② 以前是漏掉的：旧版只在「设过覆盖值」时才自愈，
+  // 所以「后端重新部署导致内置地址作废」这种情况**根本不会自愈** ——
+  // 而它恰恰是最常发生的那种（每次部署都会）。
+  probeBase(CLOUD_BASE).then(function(alive){
+    if(alive) return Promise.resolve(true)      // 当前这个还活着，什么都不用做
+
+    // ① 先试内置地址（只在用户设过覆盖值时才有意义）
+    if(_ovBase !== null && CLOUD_BASE !== CLOUD_BASE_DEFAULT){
+      return probeBase(CLOUD_BASE_DEFAULT).then(function(ok){
+        if(!ok) return false                     // 内置的也死了，往下走 ②
+        _healedFrom = CLOUD_BASE
+        try { localStorage.removeItem('artist_letter_cloud_base') } catch(e){}
+        CLOUD_BASE = CLOUD_BASE_DEFAULT
+        if(qSize()) setTimeout(autoFlush, 0)
+        var detail = { from: _healedFrom, to: CLOUD_BASE_DEFAULT, via: 'default' }
+        try { window.dispatchEvent(new CustomEvent('cloud-base-healed', { detail: detail })) } catch(e){}
+        if(typeof window.__onCloudBaseHealed === 'function'){
+          try { window.__onCloudBaseHealed(detail) } catch(e){}
+        }
+        return true
+      })
+    }
+    return false
+  }).then(function(fixed){
+    if(fixed) return                             // 上面已经修好了
+    // ② 去公开仓库问「现在的地址是什么」。
+    // 这是最后一道自愈，也是「后端重新部署」这条路的根治。
+    return tryDiscoverAndHeal()
   })
 }
 

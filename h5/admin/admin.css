@@ -414,23 +414,57 @@ select.input {
    这一条存在的意义是：客户在自己手机上下的单能不能自动进来，全看它。
    所以「未开启」必须是显性的 —— 不能让人以为已经在同步了。 */
 .cl-bar {
-  display:flex; align-items:center; gap:10px;
-  margin:12px 0; padding:10px 12px; border-radius:10px;
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  margin:12px 0; padding:11px 12px; border-radius:10px;
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1);
 }
 .cl-bar.ok  { background:rgba(93,202,165,.09); border-color:rgba(93,202,165,.28); }
 .cl-bar.err { background:rgba(226,75,74,.1);   border-color:rgba(226,75,74,.3); }
 .cl-bar.off { background:rgba(239,159,39,.1);  border-color:rgba(239,159,39,.3); }
-.cl-main { flex:1 1 auto; min-width:0; }
-.cl-t { font-size:13px; font-weight:600; color:#c9c8c2; line-height:1.35; }
+.cl-main { flex:1 1 100%; min-width:0; }
+.cl-t { font-size:13px; font-weight:600; color:#c9c8c2; line-height:1.4; }
 .cl-bar.ok  .cl-t { color:#5DCAA5; }
 .cl-bar.err .cl-t { color:#F09595; }
 .cl-bar.off .cl-t { color:#EF9F27; }
-.cl-d { font-size:11.5px; line-height:1.5; color:#8d8c85; margin-top:2px; }
+.cl-d { font-size:11.5px; line-height:1.6; color:#8d8c85; margin-top:3px; }
 .cl-d b { color:#c0bfb8; }
 .cl-btn {
-  flex:0 0 auto; padding:9px 12px; border-radius:9px; border:none;
+  flex:1 1 auto; padding:9px 12px; border-radius:9px; border:none;
   background:rgba(255,255,255,.09); color:#d5d4ce;
   font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;
   white-space:nowrap;
+}
+/* 诊断按钮是次要动作 —— 别和主按钮抢视觉重量 */
+.cl-btn.ghost { flex:0 0 auto; background:transparent; border:1px solid rgba(255,255,255,.16); color:#a9a8a1; }
+.cl-bar.off .cl-btn { background:rgba(239,159,39,.22); color:#F5C97B; }
+.cl-bar.err .cl-btn { background:rgba(226,75,74,.22); color:#F5A9A9; }
+
+/* 诊断面板里的请求留痕。
+   等宽 + 可横向滚动：这些是原始记录，对齐比好看重要。 */
+.diag-log {
+  max-height:250px; overflow:auto; border-radius:9px;
+  background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08);
+  padding:8px 10px;
+}
+.diag-line {
+  display:flex; flex-wrap:wrap; gap:6px; align-items:baseline;
+  font-size:11px; line-height:1.75; padding:3px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.diag-line:last-child { border-bottom:0; }
+.dl-t { color:#6a6a62; }
+.dl-m { color:#c0bfb8; }
+.dl-s { font-weight:700; }
+.dl-s.good { color:#5DCAA5; }
+.dl-s.bad  { color:#F09595; }
+.dl-k { color:#8d8c85; }
+.dl-n { color:#6a6a62; flex-basis:100%; }
+
+/* 刚从云端进来的单：亮一下，点开就撤 —— 客户新下的单必须被「看见」 */
+.order.fresh { border-color:rgba(93,202,165,.5); box-shadow:0 0 0 1px rgba(93,202,165,.28); }
+.o-new {
+  display:inline-block; margin-left:6px; padding:1px 6px; border-radius:6px;
+  font-size:10px; font-weight:700; vertical-align:middle;
+  background:rgba(93,202,165,.2); color:#5DCAA5;
 }

@@ -63,6 +63,7 @@ function log(id, text){
 
 const CLOUD_KEY_STORE = 'artist_letter_cloud_key'
 const CLOUD_DEL_STORE = 'artist_letter_cloud_deleted'
+const CLOUD_SKIP_STORE = 'artist_letter_cloud_skip'   // 这台设备主动跳过过引导，就别每次登录都弹
 
 let cloudKey   = ''
 let cloudBusy  = false
@@ -70,6 +71,16 @@ let cloudAt    = 0            // 上次成功同步的时间
 let cloudErr   = ''
 let cloudMute  = false        // 正在把远端合并回本地时，别再触发推送（否则自己推自己）
 let cloudTimer = null
+
+// —— 下面几个是「这台设备到底看得见多少单」的证据 ——
+// 后台存在的唯一理由就是「客户下的单我能看到」。所以不能只说「同步成功」，
+// 得能把两边数字摊开给人看：服务端几单 / 本机几单 / 差在哪。
+let cloudTotal = -1           // 服务端台账单数（GET /api/ledger 的 total）
+let cloudReconciled = null    // 服务端这次读台账有没有对账成功
+let cloudFresh = []           // 本次拉取新进来的单（用来提示 + 高亮）
+const freshNos = new Set()    // 高亮中的订单号（点开卡片后消失）
+let cloudPollTimer = null
+const CLOUD_POLL_MS = 25000
 
 function cloudLoad(){
   try { cloudKey = localStorage.getItem(CLOUD_KEY_STORE) || '' } catch(e){ cloudKey = '' }
@@ -130,15 +141,33 @@ async function cloudPull(silent){
     renderCloudBar()
     return r || { ok:false }
   }
-  const before = allOrders().length
-  const merged = mergeByStamp(allOrders(), r.orders)
+  const localBefore = allOrders()
+  const beforeNos = new Set(localBefore.map(o => o.order_no))
+  const merged = mergeByStamp(localBefore, r.orders)
   cloudMute = true
   try { saveOrders(merged) } finally { cloudMute = false }
   cloudAt = Date.now(); cloudErr = ''
+  cloudTotal = (typeof r.total === 'number') ? r.total : -1
+  cloudReconciled = (r.reconciled === undefined) ? null : !!r.reconciled
+
+  // 这一轮新进来的单 —— 客户刚下的单必须**被看见**，不能只是悄悄躺在列表里。
+  // 高亮保留到他自己点开那张卡（见 toggle），避免一直亮着变成噪音。
+  //
+  // 注意：标记放在内存 Set 里，不能挂到订单对象上 ——
+  // renderList() 会重新从 localStorage 读一遍，挂在对象上的标记会当场丢掉。
+  cloudFresh = merged.filter(o => o.order_no && !beforeNos.has(o.order_no))
+  if(cloudFresh.length){
+    // 换新设备第一次接通时，整份台账都是「新进来」的。
+    // 那种情况把每张卡都点亮等于全都没亮，只提示数字就够了。
+    if(cloudFresh.length <= 8) cloudFresh.forEach(o => freshNos.add(o.order_no))
+    toast('云端进来 ' + cloudFresh.length + ' 单 · 尾号 '
+      + cloudFresh.slice(0, 6).map(o => tail(o.order_no)).join(' ')
+      + (cloudFresh.length > 6 ? ' …' : ''))
+  }
   renderList()
   // 本地可能比云端多（上次没推成功的改动）—— 拉完顺手推一次补齐
   cloudPush(true)
-  return { ok:true, added: Math.max(0, merged.length - before) }
+  return { ok:true, added: Math.max(0, merged.length - localBefore.length), fresh: cloudFresh.length }
 }
 
 async function cloudPush(silent){
@@ -166,6 +195,42 @@ function cloudErrText(r){
   return r.error ? String(r.error) : '未知错误'
 }
 
+// ==================== 自动轮询 ====================
+//
+// 之前后台只在「输完密码进门」那一刻拉一次。于是有一个很坑的场景：
+// 后台一直开着放在旁边，客户这期间下了单 —— 屏幕上什么都不会变，
+// 看上去就是「客户下的单我后台看不到」。
+//
+// 所以进门之后持续轮询（默认 25 秒），另外回到前台、网络恢复都立刻补一次。
+// 只有页面在前台时才发请求：后台标签页轮询既费电又没意义。
+function cloudPollStart(){
+  cloudPollStop()
+  cloudPollTimer = setInterval(() => {
+    if(document.hidden) return
+    if(cloudBusy) return
+    if(!cloudOn()) return
+    cloudPull(true)
+  }, CLOUD_POLL_MS)
+}
+function cloudPollStop(){
+  if(cloudPollTimer){ clearInterval(cloudPollTimer); cloudPollTimer = null }
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ return }
+  if(!cloudOn()) return
+  cloudPull(true)          // 回到前台先拉一次，别等下一个 25 秒
+  cloudPollStart()
+})
+window.addEventListener('online', () => { if(cloudOn()) cloudPull(true) })
+
+// 同步地址自愈：cloud.js 探测到本机缓存的覆盖地址已经死了、内置地址是活的，
+// 就会换过来并通知这里。此时要做的只有一件事 —— 用新地址立刻重拉。
+window.__onCloudBaseHealed = function(d){
+  cloudErr = ''
+  toast('同步地址已自动修复，正在重新拉取…')
+  setTimeout(() => { if(cloudOn()) cloudPull() }, 200)
+}
+
 function agoText(ts){
   if(!ts) return ''
   const s = Math.floor((Date.now() - ts) / 1000)
@@ -183,42 +248,173 @@ function renderCloudBar(){
     return
   }
 
+  const local = allOrders().length
+
+  // —— ① 这台设备还没填过同步密钥 ——
+  // 这是「换个设备登录就看不到单」的**唯一**原因，也是整个后台最容易漏掉的一步。
+  // 所以它不能是一条细细的提示条：必须是一块挡在列表前面的告示，
+  // 明确写出「你现在看到的是本机台账，不是全部订单」。
   if(!cloudKey){
     box.innerHTML = `
       <div class="cl-bar off">
         <div class="cl-main">
-          <div class="cl-t">云端同步未开启</div>
-          <div class="cl-d">客户在自己手机上下的单<b>不会自动进来</b>。填一次同步密钥就接通。</div>
+          <div class="cl-t">⚠ 云端同步未开启 —— 你看到的只是这台设备上的 ${local} 单</div>
+          <div class="cl-d">
+            客户在<b>他自己手机</b>上下的单不会自动进来。
+            每换一台设备（新手机、新浏览器、清了缓存）都要重新填一次同步密钥 —— 填一次就长期有效。
+          </div>
         </div>
-        <button class="cl-btn" onclick="openCloudKey()">去开启</button>
+        <button class="cl-btn" onclick="openCloudKey()">填密钥 · 接通</button>
       </div>`
     return
   }
 
-  const cls   = cloudErr ? 'err' : 'ok'
-  const title = cloudErr ? ('云端同步失败：' + cloudErr) : ('云端同步已开启 · ' + (cloudAt ? agoText(cloudAt) : '还没同步过'))
-  const desc  = cloudErr
-    ? '本地台账照常能用，改动会在网络恢复后补推。'
-    : '客户页下的单会自动进来；这边的改动也会推上去。'
+  if(cloudErr){
+    box.innerHTML = `
+      <div class="cl-bar err">
+        <div class="cl-main">
+          <div class="cl-t">⚠ 云端同步失败：${esc(cloudErr)} —— 本机 ${local} 单，云端单数未知</div>
+          <div class="cl-d">
+            本地台账照常能用，改动会在网络恢复后补推。
+            <b>但此刻你看不到客户刚下的单</b>，别急着下结论说「没有新单」。
+          </div>
+        </div>
+        <button class="cl-btn" onclick="cloudPull()">重试</button>
+        <button class="cl-btn ghost" onclick="openCloudDiag()">诊断</button>
+      </div>`
+    return
+  }
+
+  // —— ③ 正常：把两个数字摊开 ——
+  // 「云端 2 / 本机 2」比「同步成功」有用得多：差一个数，就说明有事。
+  const diff = (cloudTotal >= 0 && cloudTotal !== local)
+  const title = cloudBusy
+    ? '正在同步…'
+    : ('云端同步已开启 · ' + (cloudAt ? agoText(cloudAt) : '还没同步过'))
+  const desc = diff
+    ? `云端 ${cloudTotal} 单 / 本机 ${local} 单 —— 数字对不上，点「诊断」看差在哪`
+    : (cloudTotal >= 0
+        ? `云端 ${cloudTotal} 单 / 本机 ${local} 单 · 两边一致。客户页下的单每 ${Math.round(CLOUD_POLL_MS/1000)} 秒自动进来一次`
+        : `本机 ${local} 单 · 客户页下的单会自动进来；这边的改动也会推上去`)
 
   box.innerHTML = `
-    <div class="cl-bar ${cls}">
+    <div class="cl-bar ${diff ? 'err' : 'ok'}">
       <div class="cl-main">
-        <div class="cl-t">${cloudBusy ? '同步中…' : esc(title)}</div>
+        <div class="cl-t">${esc(title)}</div>
         <div class="cl-d">${esc(desc)}</div>
       </div>
-      <button class="cl-btn" onclick="cloudPull()">${cloudErr ? '重试' : '立即同步'}</button>
+      <button class="cl-btn" onclick="cloudPull()">${diff ? '强制同步' : '立即同步'}</button>
+      <button class="cl-btn ghost" onclick="openCloudDiag()">诊断</button>
     </div>`
+}
+
+// ==================== 云端同步诊断 ====================
+// 「客户下的单我后台看不到」这句话，必须能被拆成可验证的几段：
+//   地址对不对 → 连不连得上 → 密钥对不对 → 服务端有几单 → 本机有几单 → 差在哪
+// 光看一个「同步失败」是查不出来的。
+async function openCloudDiag(){
+  const local = allOrders()
+  const base = (window.Cloud && Cloud.base) ? Cloud.base() : '(未加载 cloud.js)'
+  const isOv = (window.Cloud && Cloud.isOverridden) ? Cloud.isOverridden() : false
+  const healed = (window.Cloud && Cloud.healedFrom) ? Cloud.healedFrom() : ''
+  const pend = (window.Cloud && Cloud.pending) ? Cloud.pending() : 0
+
+  openSheet(`
+    <div class="sh-title">云端同步诊断</div>
+    <div class="sh-sub">正在探测服务端…</div>
+    <div id="diag-body"><div class="hint">探测中…</div></div>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet()">关闭</button>
+  `)
+
+  // 连通性和「服务端几单」用两个不同的接口，各管一件事：
+  //   · health  → 只回答「通不通、是不是我们的服务」（不依赖日志接口是否存在）
+  //   · ledger  → 回答「服务端到底有几单」（这个数字是权威的，health 里那个不是）
+  //   · logs    → 只用来显示请求留痕；服务端版本旧时它是 404，要单独说明
+  let h = null, lg = null
+  try { h = await Cloud.health() } catch(e){}
+  try { lg = await Cloud.logs(cloudKey, 40) } catch(e){}
+
+  const online = !!(h && h.ok)
+  const serverTotal = cloudTotal                       // 来自上次 GET /api/ledger
+  const logsOK = !!(lg && lg.ok)
+  const logsMissing = !!(lg && lg.status === 404)       // 服务端还是旧版本
+
+  const body = document.getElementById('diag-body')
+  if(!body) return
+
+  body.innerHTML = `
+    <div class="chk-row"><div class="chk-key">同步地址</div><div class="chk-val mono">${esc(base)}</div></div>
+    <div class="chk-row"><div class="chk-key">地址来源</div><div class="chk-val">${
+      isOv ? '<b style="color:#EF9F27">本机覆盖值（非常规）</b>' : '内置默认'
+    }</div></div>
+    ${healed ? `<div class="chk-row"><div class="chk-key">已自愈</div><div class="chk-val" style="color:#5DCAA5">旧的死地址已被自动替换</div></div>` : ''}
+    <div class="chk-row"><div class="chk-key">同步密钥</div><div class="chk-val">${
+      cloudKey ? ('已配置（' + cloudKey.length + ' 位）') : '<b style="color:#EF9F27">未配置</b>'
+    }</div></div>
+    <div class="chk-row"><div class="chk-key">服务端连通</div><div class="chk-val">${
+      online ? '<b style="color:#5DCAA5">通</b>'
+      : (h && h.wrong_service ? '<b style="color:#E24B4A">地址不是我们的服务</b>'
+        : '<b style="color:#E24B4A">不通</b>')
+    }</div></div>
+    <div class="chk-row"><div class="chk-key">服务端台账</div><div class="chk-val">${
+      serverTotal >= 0 ? serverTotal + ' 单' : '还没读到'
+    }</div></div>
+    <div class="chk-row"><div class="chk-key">本机台账</div><div class="chk-val">${local.length} 单</div></div>
+    <div class="chk-row"><div class="chk-key">待补推</div><div class="chk-val">${pend ? pend + ' 单' : '无'}</div></div>
+    <div class="chk-row"><div class="chk-key">最近同步</div><div class="chk-val">${
+      cloudErr ? '<b style="color:#E24B4A">' + esc(cloudErr) + '</b>' : (cloudAt ? agoText(cloudAt) : '还没同步过')
+    }</div></div>
+
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="closeSheet();cloudPull()">立即重新同步</button>
+
+    ${logsOK ? `
+      <div class="sh-gap"></div>
+      <div class="sh-sub" style="margin-bottom:6px">服务端最近收到的请求（最新的在上）</div>
+      <div class="diag-log">${
+        (lg.entries || []).slice(0, 22).map(e => {
+          const when = new Date(e.t).toLocaleString('zh-CN', { hour12:false })
+          const key = e.key === 'ok' ? '密钥✓' : (e.key === 'bad' ? '密钥✗' : (e.key === 'none' ? '无密钥' : '—'))
+          return `<div class="diag-line"><span class="dl-t">${when}</span>`
+            + `<span class="dl-m">${esc(e.m)} ${esc(e.p)}</span>`
+            + `<span class="dl-s ${e.s === 200 ? 'good' : 'bad'}">${e.s}</span>`
+            + `<span class="dl-k">${key}</span>`
+            + (e.note ? `<span class="dl-n">${esc(e.note)}</span>` : '')
+            + `</div>`
+        }).join('') || '<div class="hint">还没有任何请求记录</div>'
+      }</div>
+      <div class="hint" style="margin-top:8px; line-height:1.8">
+        这一栏就是「你的设备到底有没有连上服务器」的答案。<br>
+        · 只有 <b>GET /api/health</b> = 页面开着但没同步<br>
+        · <b>GET /api/ledger</b> 且状态 200 = 后台成功读到全部订单<br>
+        · <b>POST /api/order</b> 200 = 客户那一单服务端确实收到了
+      </div>` : (logsMissing ? `
+      <div class="hint" style="margin-top:10px; line-height:1.8">
+        服务端还是旧版本（没有请求留痕接口），所以这一栏暂时是空的。<br>
+        <b>上面那些行都是准的</b> —— 同步本身正常工作，只是看不到历史请求。
+      </div>` : `
+      <div class="hint" style="margin-top:10px; line-height:1.8">
+        读不到服务端请求记录。<br>
+        ${online ? '连通性是通的，可能只是刚才那次请求超时，点上面重试。'
+                 : (cloudKey ? '先确认手机能上网，再点上面的「立即重新同步」。' : '先填同步密钥。')}
+      </div>`)}
+  `
 }
 
 function openCloudKey(){
   openSheet(`
     <div class="sh-title">开启云端同步</div>
-    <div class="sh-sub">把同步密钥粘进来。密钥只存在这台设备的浏览器里，
-      用来证明「拉台账的人是我」。<br><b style="color:#EF9F27">不要发给别人。</b></div>
+    <div class="sh-sub">
+      <b>这是「换设备也能看到全部订单」的那一步。</b><br>
+      把同步密钥粘进来。密钥只存在这台设备的浏览器里，用来证明「拉台账的人是我」。<br>
+      <b style="color:#EF9F27">不要发给别人。</b>
+    </div>
     <textarea class="sh-textarea" id="cloud-key-input" placeholder="同步密钥">${esc(cloudKey)}</textarea>
     <div class="sh-gap"></div>
     <button class="btn-full" onclick="doSaveCloudKey()">保存并立即同步</button>
+    <div class="sh-gap"></div>
+    <button class="btn-full grey" onclick="closeSheet();openCloudDiag()">先诊断一下</button>
     <div class="sh-gap"></div>
     <button class="btn-full grey" onclick="closeSheet()">取消</button>
     ${cloudKey ? '<div class="sh-gap"></div><button class="btn-full grey" onclick="doCloudOff()">断开同步（台账不受影响）</button>' : ''}
@@ -230,18 +426,23 @@ async function doSaveCloudKey(){
   const el = document.getElementById('cloud-key-input')
   cloudSaveKey(el ? el.value : '')
   if(!cloudKey){ closeSheet(); renderCloudBar(); return }
+  try { localStorage.removeItem(CLOUD_SKIP_STORE) } catch(e){}
   closeSheet()
   renderCloudBar()
   const r = await cloudPull()
   if(r && r.ok){
-    toast('已连接 · 云端 ' + allOrders().length + ' 单')
+    toast('已连接 · 云端 ' + (cloudTotal >= 0 ? cloudTotal : allOrders().length) + ' 单 / 本机 ' + allOrders().length + ' 单')
   } else {
     toast('连不上：' + cloudErrText(r))
   }
+  cloudPollStart()
 }
 
 function doCloudOff(){
   cloudSaveKey('')
+  // 主动断开 = 以后别再自动弹密钥框，但那条告示一直留着
+  try { localStorage.setItem(CLOUD_SKIP_STORE, '1') } catch(e){}
+  cloudPollStop()
   // 备份提醒的措辞跟着同步状态变（开着说「服务停了也还在」，关着说「清缓存就没了」），
   // 所以断开时也要重画一次，否则那句话会停在上一状态。
   closeSheet(); renderCloudBar(); renderBackupNudge()
@@ -561,6 +762,18 @@ function unlock(){
   cloudLoad()
   renderCloudBar()
   cloudPull(true)
+  cloudPollStart()
+
+  // —— 新设备第一次进门：直接弹密钥输入 ——
+  // 这是「换个设备登录就看不到单」的唯一原因。原来只靠一条细提示，
+  // 很容易被忽略；而只要忽略了，他看到的永远是一份不完整的台账，
+  // 却以为「系统坏了」。所以这里主动把这一步推到他面前。
+  // 主动断开过同步的设备（CLOUD_SKIP_STORE）不再打扰，只留那条告示。
+  let skipped = false
+  try { skipped = localStorage.getItem(CLOUD_SKIP_STORE) === '1' } catch(e){}
+  if(!cloudKey && !skipped){
+    setTimeout(() => { if(!cloudKey) openCloudKey() }, 700)
+  }
 }
 
 function resetPin(){
@@ -669,17 +882,19 @@ function doReconcile(){
   if(!hits.length){
     const tails = list.map(o => tail(o.order_no))
     const shown = tails.slice(0, 12)
+    const synced = cloudOn() && !cloudErr
     out.innerHTML =
       '<div class="hint" style="color:#EF9F27; line-height:1.85">'
-      + '本机台账里没有尾号 <b>' + esc(t) + '</b>。<br>'
+      + '台账里没有尾号 <b>' + esc(t) + '</b>。<br>'
       + (list.length
-          ? '这台设备上现有的尾号：<br><b style="letter-spacing:1px">'
+          ? '现有尾号：<br><b style="letter-spacing:1px">'
             + shown.map(esc).join('　') + (tails.length > shown.length ? ' …' : '') + '</b><br>'
-            + '对不上，说明这一单还没录进来。'
-          : '<b>这台设备上一条订单都没有。</b><br>'
-            + '那基本可以确定：你下单用的浏览器 / 网址，和现在开后台的不是同一个。')
+          : '<b>这台设备上一条订单都没有。</b><br>')
+      + (synced
+          ? '同步是通的，所以这单<b>确实还没进服务端</b> —— 让客户把订单信息发你，用「新建订单」补录。'
+          : '<b>注意：这台设备此刻没接通云端同步</b>，你看到的不一定是全部订单。先点下面看诊断。')
       + '</div>'
-      + '<button class="btn-full grey" style="margin-top:10px" onclick="showSelfCheck()">看看本机自检 ›</button>'
+      + '<button class="btn-full grey" style="margin-top:10px" onclick="closeSheet();openCloudDiag()">看云端同步诊断 ›</button>'
     return
   }
   const o = hits[0]
@@ -735,23 +950,38 @@ function fillRecon(t){
 
 function showSelfCheck(){
   const list = allOrders()
+  const on = cloudOn()
   openSheet(`
     <div class="sh-title">本机自检</div>
-    <div class="sh-sub">查不到订单时先看这里 —— 九成是设备或网址对不上，不是系统坏了。</div>
+    <div class="sh-sub">查不到订单时先看这里。现在有云端同步了，九成问题出在<b>同步没接通</b>，而不是设备或网址。</div>
 
-    <div class="chk-row"><div class="chk-key">后台域名</div><div class="chk-val mono">${esc(location.hostname)}</div></div>
-    <div class="chk-row"><div class="chk-key">后台路径</div><div class="chk-val mono">${esc(location.pathname)}</div></div>
+    <div class="chk-row"><div class="chk-key">云端同步</div><div class="chk-val">${
+      !window.Cloud || !Cloud.on() ? '<b style="color:#E24B4A">未配置地址</b>'
+      : (!cloudKey ? '<b style="color:#EF9F27">未填密钥 · 只能看到本机</b>'
+        : (cloudErr ? '<b style="color:#E24B4A">失败：' + esc(cloudErr) + '</b>'
+          : '<b style="color:#5DCAA5">已开启 · ' + (cloudAt ? agoText(cloudAt) : '还没同步过') + '</b>'))
+    }</div></div>
+    <div class="chk-row"><div class="chk-key">云端台账</div><div class="chk-val">${
+      cloudTotal >= 0 ? cloudTotal + ' 单' : '未知'
+    }</div></div>
     <div class="chk-row"><div class="chk-key">本机台账</div><div class="chk-val">${list.length} 单</div></div>
+    <div class="chk-row"><div class="chk-key">后台域名</div><div class="chk-val mono">${esc(location.hostname)}</div></div>
     <div class="chk-row"><div class="chk-key">现有尾号</div><div class="chk-val mono">${
       list.length ? list.slice(0, 12).map(o => esc(tail(o.order_no))).join(' ') : '（无）'
     }</div></div>
 
+    <div class="sh-gap"></div>
+    <button class="btn-full" onclick="closeSheet();openCloudDiag()">云端同步诊断（看服务端收到了什么）</button>
+    ${!on || !cloudKey ? '<div class="sh-gap"></div><button class="btn-full" onclick="closeSheet();openCloudKey()">填同步密钥 · 让客户的单进来</button>' : ''}
+
     <div class="hint" style="margin-top:15px; line-height:1.85">
-      订单只存在<b>下单那台设备的那个浏览器</b>里。<br><br>
-      ① <b>换浏览器就断了</b> —— 微信里打开、和 Safari / Chrome 里打开，数据是分开的。<br>
-      ② <b>换网址也断了</b> —— 上面这个域名，要和你开客户页时地址栏里那个一致。<br>
-      ③ 客户在<b>他自己</b>手机上下单，永远不会自动进你这里。<br><br>
-      要让订单进来：让客户点他页面上的「复制下单信息」发给你，
+      <b>只要云端同步是通的</b>，客户在他自己手机上下单，就会自动出现在这里 ——
+      不管你现在用的是哪台设备。<br><br>
+      同步<b>没通</b>的时候，订单才会只留在下单那台设备上。这时有三种可能：<br>
+      ① 这台设备没填过同步密钥（<b>换手机 / 换浏览器 / 清过缓存，都要重填一次</b>）<br>
+      ② 网络不通 —— 页面上会写「同步失败」，重试即可<br>
+      ③ 客户下单那一刻网络抖了 —— 订单会排进补推队列，网络恢复后自动补上<br><br>
+      无论哪种情况，兜底通道一直都在：让客户点他页面上的「复制下单信息」发给你，
       你用上面的「新建订单」粘进来。
     </div>
 
@@ -766,9 +996,12 @@ function copySelfCheck(){
   const list = allOrders()
   copy([
     '【接单台账 · 本机自检】',
-    '后台域名：' + location.hostname,
-    '后台路径：' + location.pathname,
+    '云端同步：' + (!window.Cloud || !Cloud.on() ? '未配置地址'
+      : (!cloudKey ? '未填密钥' : (cloudErr ? '失败(' + cloudErr + ')' : '已开启'))),
+    '云端台账：' + (cloudTotal >= 0 ? cloudTotal + ' 单' : '未知'),
+    '同步地址：' + ((window.Cloud && Cloud.base) ? Cloud.base() : '-'),
     '本机台账：' + list.length + ' 单',
+    '后台域名：' + location.hostname,
     '现有尾号：' + (list.length ? list.slice(0, 20).map(o => tail(o.order_no)).join(' ') : '无'),
     '时间：' + new Date().toLocaleString('zh-CN'),
   ].join('\n'))
@@ -1243,11 +1476,11 @@ function orderCard(o){
   const addrText = String(o.recipient_addr || '').trim()
 
   return `
-  <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''}" id="od-${o.id}">
+  <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''} ${freshNos.has(o.order_no) ? 'fresh' : ''}" id="od-${o.id}">
     <div class="o-top" onclick="toggle('${o.id}')">
       <div>
         <div class="o-no">${esc(tail(o.order_no))}<small>${esc(o.order_no)}</small></div>
-        <div class="o-artist">${esc(o.artist || '（未填艺人）')}</div>
+        <div class="o-artist">${esc(o.artist || '（未填艺人）')}${freshNos.has(o.order_no) ? ' <span class="o-new">刚进来</span>' : ''}</div>
       </div>
       <div class="o-tags">
         <span class="tag ${paid ? 'green' : 'amber'}">${paid ? '已收款' : '待收款'}</span>
@@ -1303,8 +1536,20 @@ function orderCard(o){
 function toggle(id){
   const el = document.getElementById('od-' + id)
   if(!el) return
+  // 只要点过这张卡就算「看见了」—— 不管这一次是展开还是收起。
+  // 高亮的唯一作用是把人引到这张卡上；引到了就该撤，否则它会一直亮着变成噪音。
+  clearFresh(id, el)
   el.classList.toggle('open')
   el.classList.contains('open') ? openIds.add(id) : openIds.delete(id)
+}
+
+function clearFresh(id, el){
+  const o = getOrder(id)
+  if(!o || !freshNos.has(o.order_no)) return
+  freshNos.delete(o.order_no)
+  el.classList.remove('fresh')
+  const badge = el.querySelector('.o-new')
+  if(badge) badge.remove()
 }
 
 // ==================== 订单操作 ====================
@@ -1604,12 +1849,18 @@ function openSettings(){
   const list  = allOrders()
   const email = localStorage.getItem(EMAIL_KEY) || '未登记'
   const hasRec = !!localStorage.getItem(RECOV_KEY)
+  const cloudTxt = (!window.Cloud || !Cloud.on()) ? '未配置'
+    : (!cloudKey ? '未填密钥 · 只看得到本机'
+      : (cloudErr ? '失败 · ' + cloudErr
+        : '已开启 · 云端 ' + (cloudTotal >= 0 ? cloudTotal : '?') + ' / 本机 ' + list.length))
   openSheet(`
     <div class="sh-title">设置</div>
     <div class="sh-sub">
       台账共 ${list.length} 单 · 累计收款 ¥${list.filter(o => o.pay_status === 'paid').length * PRICE}<br>
-      数据只存在这台设备的浏览器里，清缓存会丢，记得常导出备份。
+      本机始终留一份完整副本，云端同步是给「换设备也能看到全部订单」用的。
     </div>
+    <button class="sh-opt" onclick="closeSheet();openCloudKey()">☁️ 云端同步<small>${esc(cloudTxt)}</small></button>
+    <button class="sh-opt" onclick="closeSheet();openCloudDiag()">🩺 云端同步诊断<small>服务端收到了什么 · 请求留痕</small></button>
     <button class="sh-opt" onclick="doExport()">📤 导出备份</button>
     <button class="sh-opt" onclick="pickImport()">📥 导入备份</button>
     <button class="sh-opt" onclick="resetPin()">🔑 重设访问密码</button>
@@ -1620,14 +1871,20 @@ function openSettings(){
   `)
 }
 function sheetWipe(){
+  const n = allOrders().length
   openSheet(`
     <div class="sh-title">清空全部台账？</div>
-    <div class="sh-sub">${allOrders().length} 单全部删除，不可恢复。<br>如果只是想重来，请先导出备份。</div>
+    <div class="sh-sub">${n} 单全部删除，不可恢复。<br>如果只是想重来，请先导出备份。
+      ${cloudOn() ? '<br><br><b style="color:#EF9F27">云端那份也会一起清掉</b> —— 否则下次同步会把它拉回来。' : ''}</div>
     <button class="sh-opt danger" onclick="doWipe()">确认清空</button>
     <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">取消</button>
   `)
 }
 function doWipe(){
+  // 先给每一单留墓碑，再清空。
+  // 不这么做的话：本地清空了，云端还留着，下一次同步会把它们**全部拉回来** ——
+  // 看起来就是「删不掉」。
+  allOrders().forEach(o => { if(o.order_no) markDeleted(o.order_no) })
   saveOrders([]); closeSheet(); toast('已清空'); renderList()
 }
 

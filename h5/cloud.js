@@ -13,17 +13,79 @@
 // 实测从深圳访问：DNS 0.004s / 连接 0.007s / 总计 0.28s，解析到腾讯云。
 //
 // ⚠ 这个地址是**发布时生成**的：每次重新发布同一个应用，分享链接都会变。
-// 已实测连续四次：83cf23c6… → 25dafc60… → 45c34785… → 6eaa80f7… → a3117d63…
+// 已实测连续七次：83cf23c6… → 25dafc60… → 45c34785… → 6eaa80f7… → a3117d63… → 8f1cf1e0… → ae1556c6…
 // （旧地址直接返回一张营销页）。所以**每次重新发布之后，必须把新地址更新到这里
-// 并重推一次 GitHub Pages**，否则线上客户页会连到一个死地址 ——
-// 而本地测试完全发现不了这件事（本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE = 'https://ae1556c6d4554922b72419d0d0753279.sg2.agentos-app.run'
+// 并重推一次 GitHub Pages**（用 letter-api/set-endpoint.js 一条命令改完四处），
+// 否则线上客户页会连到一个死地址 —— 而本地测试完全发现不了这件事
+// （本地是用 localStorage 覆盖这个常量的，走不到这里）。
+var CLOUD_BASE_DEFAULT = 'https://ae1556c6d4554922b72419d0d0753279.sg2.agentos-app.run'
+var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
-// 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）
-try {
-  var _ov = localStorage.getItem('artist_letter_cloud_base')
-  if(_ov !== null) CLOUD_BASE = _ov
-} catch(e){}
+// —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——
+//
+// 三种取值，语义必须分清楚：
+//   ① 没设过这个 key         → 用内置默认地址
+//   ② 设成**空字符串**        → **显式关闭同步**（页面退回纯本地模式）
+//                             这不是「地址坏了」，是故意的，自愈绝不能把它「修好」
+//   ③ 设成一个 URL            → 用它，但要能被自愈（见下）
+//
+// ⚠⚠ ③ 必须是**会自愈**的，否则它就是一个永久陷阱：
+// 覆盖值存在 localStorage 里，一旦被写进一个死地址（而地址每次重新发布都会变），
+// 它会**永久生效** —— 这台设备从此连不上服务器，界面上看起来就是「订单没进来」，
+// 而且刷新、清缓存都不一定想得起来要清这一个 key。
+//
+// 所以：先把覆盖值用起来（保证迁移时的即时可用），
+// 同时后台探测一次 —— 覆盖值死了、内置地址活着，就立刻自愈并通知页面。
+var _ovBase = null
+try { _ovBase = localStorage.getItem('artist_letter_cloud_base') } catch(e){}
+if(_ovBase !== null) CLOUD_BASE = _ovBase
+
+var _healedFrom = ''
+
+// 探测一个地址到底是不是「我们自己的服务」。
+//
+// ⚠ 不能只看 HTTP 200。这个应用每次重新发布都会换地址，而**旧地址返回的是一张营销页**
+// —— 它是 200，但完全不是我们的服务。只看状态码的话，会把一个已经作废的地址
+// 判成「活着」，于是自愈永远不触发，这台设备就永久卡在死地址上。
+//
+// 所以必须验内容：/api/health 会回 { ok:true, service:'artist-letter-api' }。
+// 顺带这个探测也验了 CORS —— 跨域被拒的地址对页面来说同样是不可用的，
+// 而 fetch 拿不到 CORS 头时会直接抛错，这里会落到 catch 变成 false，正好。
+function probeBase(url){
+  if(!url) return Promise.resolve(false)
+  var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+  var timer = setTimeout(function(){ if(ctl) ctl.abort() }, 8000)
+  return fetch(url + '/api/health', { cache:'no-store', signal: ctl ? ctl.signal : undefined })
+    .then(function(r){
+      if(!r.ok) return false
+      return r.json().catch(function(){ return null }).then(function(j){
+        return !!(j && j.ok === true && j.service === 'artist-letter-api')
+      })
+    })
+    .catch(function(){ return false })
+    .then(function(ok){ clearTimeout(timer); return ok })
+}
+
+function healBase(){
+  if(_ovBase === null) return                    // 没设覆盖值，没什么可修
+  if(_ovBase === '') return                      // 显式关闭同步 —— 故意的，别去「修好」它
+  if(_ovBase === CLOUD_BASE_DEFAULT) return
+  probeBase(_ovBase).then(function(ok){
+    if(ok) return                                  // 覆盖值是活的，尊重它
+    return probeBase(CLOUD_BASE_DEFAULT).then(function(ok2){
+      if(!ok2) return                              // 两个都不通 —— 是网络的问题，不是地址的问题
+      // 覆盖值已死、内置地址是活的 → 立刻自愈
+      _healedFrom = _ovBase
+      try { localStorage.removeItem('artist_letter_cloud_base') } catch(e){}
+      CLOUD_BASE = CLOUD_BASE_DEFAULT
+      var detail = { from: _healedFrom, to: CLOUD_BASE_DEFAULT }
+      try { window.dispatchEvent(new CustomEvent('cloud-base-healed', { detail: detail })) } catch(e){}
+      if(typeof window.__onCloudBaseHealed === 'function'){
+        try { window.__onCloudBaseHealed(detail) } catch(e){}
+      }
+    })
+  })
+}
 
 // —— 连接预热 ——
 // 第一次连到这个域名要建 DNS + TCP + TLS。实测在浏览器里这一步能到 5 秒以上
@@ -45,13 +107,53 @@ function warmUp(){
 }
 if(document.head) warmUp()
 else document.addEventListener('DOMContentLoaded', warmUp)
+healBase()
+
+// ==================== 待推队列 ====================
+//
+// 为什么必须有：客户点了下单、页面显示「订单号 XXX」，但那一刻网络刚好不通，
+// 这一次 POST 就没了 —— 页面不会重试，客户也不会再发一遍（他以为已经送到了）。
+// 这一单在服务端**永远不会出现**，后台当然看不到。
+//
+// 所以失败的推送必须落进一个持久队列，之后每次打开页面、每次回到前台都补推一次。
+// 队列存在 localStorage：和订单本身同一块存储，一起清、一起在。
+var PUSH_Q = 'artist_letter_push_queue_v1'
+
+function qRead(){
+  try { var a = JSON.parse(localStorage.getItem(PUSH_Q)); return Array.isArray(a) ? a : [] } catch(e){ return [] }
+}
+function qWrite(a){
+  try {
+    if(a && a.length) localStorage.setItem(PUSH_Q, JSON.stringify(a.slice(-80)))
+    else localStorage.removeItem(PUSH_Q)
+  } catch(e){}
+}
+function qHas(no){ return qRead().some(function(o){ return o && o.order_no === no }) }
+function qAdd(order){
+  if(!order || !order.order_no) return
+  var a = qRead().filter(function(o){ return o && o.order_no !== order.order_no })
+  a.push(order)
+  qWrite(a)
+}
+function qDrop(no){ qWrite(qRead().filter(function(o){ return o && o.order_no !== no })) }
+function qSize(){ return qRead().length }
+
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms) }) }
 
 var Cloud = {
   on: function(){ return !!CLOUD_BASE },
+  base: function(){ return CLOUD_BASE },
+  defaultBase: function(){ return CLOUD_BASE_DEFAULT },
+  isOverridden: function(){ return !!(CLOUD_BASE && CLOUD_BASE !== CLOUD_BASE_DEFAULT) },
+  healedFrom: function(){ return _healedFrom },
+  pending: qSize,
 
   // —— 客户页：把订单送到服务端 ——
   // 失败**绝不能**影响下单流程：页面上的「发给客服（一键分享）」仍是兜底通道。
-  pushOrder: function(order){
+  //
+  // 注意 body 里**不带 id**：id 是那台设备本地的随机串，服务端和后台都不用，
+  // 传上去只会在合并时制造无意义的差异。
+  _post: function(order){
     if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
     return fetch(CLOUD_BASE + '/api/order', {
       method: 'POST',
@@ -63,15 +165,64 @@ var Cloud = {
         return_addr: order.return_addr, letter_source: order.letter_source,
         letter_note: order.letter_note, created_at: order.created_at,
       }),
-    }).then(function(r){ return r.json().catch(function(){ return {} }) })
-      .catch(function(){ return { ok:false, net:true } })
+    }).then(function(r){
+      return r.json().catch(function(){ return {} }).then(function(j){
+        j.status = r.status
+        return j
+      })
+    }).catch(function(){ return { ok:false, net:true } })
+  },
+
+  // 带重试的推送。3 次、退避 0.6s / 1.6s —— 手机信号抖一下就过去的那种失败，
+  // 用户完全无感；真不通才落进队列。
+  pushOrder: function(order, opts){
+    var o = opts || {}
+    var tries = o.tries || 3
+    var delays = [0, 600, 1600]
+    var self = this
+    function attempt(i){
+      return self._post(order).then(function(r){
+        if(r && r.ok){
+          qDrop(order.order_no)
+          r.attempts = i + 1
+          return r
+        }
+        // 4xx 是「服务端明确拒绝」——重试没有意义，但也要落队列：
+        // 万一是服务端 bug，队列能让它在修好后自动补上。
+        if(i + 1 >= tries) return r
+        return sleep(delays[Math.min(i + 1, delays.length - 1)]).then(function(){ return attempt(i + 1) })
+      })
+    }
+    return attempt(0).then(function(r){
+      if(!(r && r.ok)) qAdd(order)      // 最终失败 → 落队列，之后自动补推
+      return r
+    })
+  },
+
+  // 补推队列里的所有单。返回 { tried, ok, left }
+  flushQueue: function(){
+    var q = qRead()
+    if(!q.length) return Promise.resolve({ tried:0, ok:0, left:0 })
+    var self = this, ok = 0
+    return q.reduce(function(chain, order){
+      return chain.then(function(){
+        return self.pushOrder(order, { tries: 2 }).then(function(r){ if(r && r.ok) ok++ })
+      })
+    }, Promise.resolve()).then(function(){
+      return { tried: q.length, ok: ok, left: qSize() }
+    })
   },
 
   // —— 后台：拉取台账 ——
   pull: function(key){
     if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
-    return fetch(CLOUD_BASE + '/api/ledger', { headers: { 'X-Admin-Key': key } })
-      .then(function(r){ return r.json().catch(function(){ return {} }) })
+    return fetch(CLOUD_BASE + '/api/ledger', { headers: { 'X-Admin-Key': key }, cache:'no-store' })
+      .then(function(r){
+        return r.json().catch(function(){ return {} }).then(function(j){
+          j.status = r.status
+          return j
+        })
+      })
       .catch(function(){ return { ok:false, net:true } })
   },
 
@@ -84,6 +235,43 @@ var Cloud = {
       body: JSON.stringify({ orders: orders, deleted: deleted || [] }),
     }).then(function(r){ return r.json().catch(function(){ return {} }) })
       .catch(function(){ return { ok:false, net:true } })
+  },
+
+  // —— 后台：服务端连通性 ——
+  // 只回答「通不通、是不是我们的服务」。刻意不依赖 /api/logs ——
+  // 那样的话，服务端还是旧版本（没有日志接口）时，诊断会误报成「连不上」，
+  // 把一个版本差异说成网络故障，比不说还糟。
+  health: function(){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+    var timer = setTimeout(function(){ if(ctl) ctl.abort() }, 8000)
+    return fetch(CLOUD_BASE + '/api/health', { cache:'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function(r){
+        return r.json().catch(function(){ return {} }).then(function(j){
+          j.status = r.status
+          j.ok = !!(r.ok && j && j.ok === true && j.service === 'artist-letter-api')
+          if(r.ok && j && j.service !== 'artist-letter-api') j.wrong_service = true
+          return j
+        })
+      })
+      .catch(function(){ return { ok:false, net:true } })
+      .then(function(j){ clearTimeout(timer); return j })
+  },
+
+  // —— 后台：服务端请求留痕（排障用）——
+  // 「那台设备到底有没有连上来」这个问题的答案就在这里。
+  // 服务端版本较旧时这个接口不存在，会拿到 404 —— 调用方要按 not_found 单独说明，
+  // 不要把它当成「连不上」。
+  logs: function(key, n){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    return fetch(CLOUD_BASE + '/api/logs?n=' + (n || 80), {
+      headers: { 'X-Admin-Key': key }, cache:'no-store',
+    }).then(function(r){
+      return r.json().catch(function(){ return {} }).then(function(j){
+        j.status = r.status
+        return j
+      })
+    }).catch(function(){ return { ok:false, net:true } })
   },
 
   // —— 客户自服务：换设备也能查自己的单 ——
@@ -107,3 +295,29 @@ var Cloud = {
       .catch(function(){ return { ok:false, net:true } })
   },
 }
+
+// —— 自动补推 ——
+// 三个触发点：① 页面加载 ② 回到前台 ③ 每 45 秒一次（队列非空时才真的发请求）。
+// 客户下单后如果那次推送失败，只要他还在这个页面、或者以后再打开一次，单子就会补上。
+function autoFlush(){
+  if(!CLOUD_BASE) return
+  Cloud.flushQueue().then(function(r){
+    if(r && r.ok > 0 && typeof window.__onPushFlushed === 'function'){
+      try { window.__onPushFlushed(r) } catch(e){}
+    }
+  })
+}
+var _flushTimer = null
+function startAutoFlush(){
+  autoFlush()
+  if(_flushTimer) return
+  _flushTimer = setInterval(function(){
+    if(document.hidden) return
+    if(!qSize()) return
+    autoFlush()
+  }, 45000)
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startAutoFlush)
+else startAutoFlush()
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) autoFlush() })
+window.addEventListener('online', function(){ autoFlush() })

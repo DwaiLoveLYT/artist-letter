@@ -57,10 +57,18 @@ const PAY_QR = 'images/pay-qr.jpg'
 const PAY_QR_READY = true
 
 // ==================== 状态机 ====================
+//
+// 顺序就是客户在「进度」里看到的那条时间线，从下往上推进。
+// ⚠ 这份列表的 **key 与顺序**必须和 admin/admin.js 里那份完全一致 ——
+// 两边不一致时，后台改完状态客户端会显示成「处理中」，而且不会有任何报错。
+// label **可以、也应该**不同：客户页要客户看得懂（「已收款，排队中」），
+// 后台要他自己一眼扫得快（「待开工」）。别为了「一致」把两边写成同一句话。
 const STATUS_FLOW = [
   { key:'created', label:'已提交，待付款', hint:'订单已生成，请按页面提示完成付款。' },
   { key:'paid',    label:'已收款，排队中', hint:'款项已确认，等待安排画师。' },
   { key:'drawing', label:'画师绘制中',     hint:'两个手绘信封制作中。' },
+  { key:'drawn',   label:'绘制完成',       hint:'信封已经画好了，正在核对细节、准备写信与贴票。' },
+  { key:'packing', label:'准备寄出',       hint:'信已封好、邮票已贴，等下一次投递。' },
   { key:'mailed',  label:'已寄出',         hint:'已投递并录制投递视频，等待对方收取。' },
   { key:'done',    label:'已完成',         hint:'寄出后 4–8 周无退回，视为送达。' },
 ]
@@ -383,9 +391,14 @@ function cloudWhy(r){
   if(r.queue_failed) return '这台设备无法保存待补发订单'
   if(r.net) return '网络不通'
   if(r.off) return '同步未开启'
-  if(r.status === 429) return '请求太频繁'
+  // ⚠ 这一句是**印给客户看**的，所以这里绝不写「频繁」「太快」这类词。
+  // 客户什么都没做错：他可能只是多刷了几次进度，或者和几百个人共用一个运营商出口 IP。
+  // 说他「点太快」既没用，又让他以为是自己把系统弄坏了。
+  // 只说他该知道的一件事：这一单已经排队了，会自动重发。
+  if(r.status === 429) return '我这边正忙，这一单排在队里会自动重发'
   if(r.status >= 500) return '服务端暂时不可用'
-  return r.error ? String(r.error) : '服务端没确认'
+  // 兜底也不回原始 error 码 —— 'bad_json' / 'bad_order_no' 这种是给我自己看的
+  return '我这边暂时没接住'
 }
 
 function syncOrderToCloud(order){
@@ -830,12 +843,42 @@ async function doRefreshOrders(o){
   syncLine('正在同步最新进度…', 'busy')
 
   let checked = 0, changed = 0, failed = 0, limited = false, repushed = 0
+
+  // ★ 一次请求把所有单查完 —— 这是「点两下就说查询太频繁」的根治办法。
+  //
+  // 以前每一单各发一次 GET /api/order/<no>，6 单就是 6 次，
+  // 而单条查单是 30 次/小时/IP —— 点几下额度就见底。
+  // 并成一次之后，正常使用再怎么点也碰不到额度（批量额度按**条数**算，300 条/小时）。
+  const byNo = {}
+  if(targets.length){
+    let br = null
+    try { br = await Cloud.lookupOrders(targets.map(t => ({ order_no: t.order_no, phone: t.customer_phone }))) }
+    catch(e){ br = null }
+    if(br && br.ok && Array.isArray(br.results)){
+      br.results.forEach(x => { if(x && x.order_no) byNo[String(x.order_no)] = x })
+    }else if(br && br.status === 429){
+      limited = true
+    }
+    // 其它情况（服务端还是旧版本没有这个接口 / 网络抖了）不报错：
+    // 下面会自然退回逐单查 —— 这正是「前端与后端分开发」时必须有的降级。
+  }
+
   for(const ord of targets){
     let r = null
-    try { r = await Cloud.lookupOrder(ord.order_no, ord.customer_phone) } catch(e){ r = null }
+    const hit = byNo[ord.order_no]
+    if(hit){
+      // 仓库那一侧不可达 → 不是「这单不存在」，别拿它去触发补发
+      r = hit.upstream ? { ok:false, status:503 }
+        : (hit.found ? { ok:true, order: hit.order, status:200 } : { ok:false, status:404 })
+    }else if(!limited){
+      try { r = await Cloud.lookupOrder(ord.order_no, ord.customer_phone) } catch(e){ r = null }
+      if(r && r.status === 429) limited = true
+    }
 
-    if(r && r.status === 429){ limited = true; break }        // 限流了就别再打
-    if(r && r.ok && r.order){
+    if(!r){ failed++; continue }
+    if(r.status === 429){ limited = true; break }
+    if(r.status === 503){ failed++; continue }
+    if(r.ok && r.order){
       checked++
       const patch = serverPatch(ord, r.order)
       // 服务端查得到 = 这一单确实送到过。补上「已送达」标记 ——
@@ -848,7 +891,7 @@ async function doRefreshOrders(o){
     // 404 / 400 = 这一单服务端查不到。
     //   手机尾号对不上 → 补发也救不回来（服务端按单号幂等，不会建出第二张）
     //   真的没上去   → 补发就是唯一的救命手段，绝不能默默跳过
-    if(r && (r.status === 404 || r.status === 400)){
+    if(r.status === 404 || r.status === 400){
       const neverConfirmed = !ord.cloud_at
       const cooled = now - (Number(ord.repush_at) || 0) > REPUSH_GAP_MS
       if(r.status === 404 && neverConfirmed && cooled && repushed < REPUSH_MAX){
@@ -890,9 +933,7 @@ async function doRefreshOrders(o){
     if(onDetail && lastOrderId) renderDetail(lastOrderId)
   }
 
-  if(limited){
-    syncLine('查询有点频繁，稍等一会儿再点「刷新进度」' + syncRetryBtn, 'warn')
-  }else if(checked === 0 && failed){
+  if(checked === 0 && failed && !limited){
     // 一单都没拉到 —— 必须说清「你现在看到的进度可能是旧的」，不能装作没事
     syncLine('⚠️ 没连上服务端，下面显示的进度可能是旧的' + syncRetryBtn, 'warn')
   }else if(orphans.length){
@@ -900,6 +941,11 @@ async function doRefreshOrders(o){
     syncLine('⚠️ 有 ' + orphans.length + ' 单还没送到我这边，正在自动补发' + syncRetryBtn, 'warn')
   }else if(changed){
     syncLine('✓ 进度刚刚更新过')
+  }else if(limited){
+    // 极少见（正常情况下一次请求就查完了，碰不到额度）。
+    // **不提「频繁」**：客户什么都没做错，说他「点太快」既没用又让人焦虑。
+    // 而且本机这份数据本来就是准的，只是「刚刚没刷成」——如实说这一句就够。
+    syncLine('进度稍后会自动同步', '')
   }else{
     syncLine('✓ 已是最新 · 刚刚同步')
   }
@@ -926,8 +972,19 @@ function renderDetail(id){
   const cur=statusIndex(o.status)
   const steps=STATUS_FLOW.map((s,i)=>({label:s.label,hint:s.hint,dotClass:i<cur?'done':(i===cur?'current':'')}))
   const media=Array.isArray(o.media)?o.media:[]
-  const imgs=media.filter(m=>m.kind==='image')
-  const vid=media.filter(m=>m.kind==='video').pop()
+  // 媒体地址必须现拼：订单里存的是**相对路径**（/api/media/...），
+  // 因为后端地址每次重新发布都会变，把绝对地址焊进数据里等于给自己埋雷。
+  // 拼的时候还要带上手机号后 4 位 —— 信封上印着客户真实收信地址，这道门不能省。
+  const mUrl=m=>window.Cloud?Cloud.mediaUrl(m,o.customer_phone):''
+  // 「有记录」不等于「能显示」：老数据里可能存着 blob: 地址（死链）。
+  // 拿不到地址就当成没有 —— 显示「还没上传」比显示一个裂图/转圈的播放器诚实，
+  // 后者看起来像「我上传的东西坏了」，而其实是地址早就失效了。
+  const okM=m=>!!m && !!mUrl(m)
+  const front=media.find(m=>okM(m)&&m.kind==='image'&&m.slot==='front')
+  const back =media.find(m=>okM(m)&&m.kind==='image'&&m.slot==='back')
+  // 没占位的图仍然按「手绘信封」相册展示 —— 兼容已经存在的历史数据
+  const imgs=media.filter(m=>okM(m)&&m.kind==='image'&&!m.slot)
+  const vid=media.filter(m=>okM(m)&&m.kind==='video').pop()
 
   wrap.innerHTML=`
     <div class="hero" style="padding-bottom:10px;">
@@ -955,17 +1012,38 @@ function renderDetail(id){
       <div class="gift-mini-desc">为什么值得写 · 加 10 节实操（写什么 / 写多长 / 何时寄）</div>
     </div>
 
+    ${(front||back)?`
+      <div class="card">
+        <div class="card-title">你的手绘信封</div>
+        <div class="env-pair">
+          ${['front','back'].map(slot=>{
+            const m = slot==='front'?front:back
+            const label = slot==='front'?'信封正面':'信封反面'
+            return m ? `
+              <div class="env-slot">
+                <img class="env-img" src="${mUrl(m)}" onclick="previewImage('${mUrl(m)}')" alt="${label}">
+                <div class="env-label">${label}</div>
+              </div>` : `
+              <div class="env-slot empty">
+                <div class="env-ph">${label}<br><span>还没上传</span></div>
+              </div>`
+          }).join('')}
+        </div>
+        <div class="tiny" style="margin-top:8px;">点一下可以放大看清楚</div>
+      </div>
+    `:''}
     ${imgs.length?`
       <div class="card">
-        <div class="card-title">手绘信封</div>
-        <div class="gallery">${imgs.map(m=>`<img class="gallery-img" src="${m.path}" onclick="previewImage('${m.path}')">`).join('')}</div>
+        <div class="card-title">制作过程</div>
+        <div class="gallery">${imgs.map(m=>`<img class="gallery-img" src="${mUrl(m)}" onclick="previewImage('${mUrl(m)}')">`).join('')}</div>
         <div class="tiny" style="margin-top:8px;">点击可放大查看</div>
       </div>
     `:''}
     ${vid?`
       <div class="card">
         <div class="card-title">投递视频</div>
-        <video class="media" style="height:200px;" src="${vid.path}" controls playsinline></video>
+        <video class="media" style="height:200px;" src="${mUrl(vid)}" controls playsinline preload="metadata"></video>
+        <div class="tiny" style="margin-top:8px;">一镜到底，从信封到投进邮筒全程不剪辑</div>
       </div>
     `:''}
     ${o.admin_note?`

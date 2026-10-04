@@ -462,6 +462,27 @@ body {
 /* ==================== 我的订单 列表 ==================== */
 .track-card { cursor:pointer; transition:border-color .15s ease; }
 .track-card:active { border-color:rgba(93,202,165,0.25); }
+/* 信封正反面：固定两个位置并排。
+   客户最想看的就是这两张 —— 一边是手绘，一边是贴票封口，
+   所以给它们一个稳定的、永远都在的位置（还没传时显示占位，而不是整块消失）。 */
+.env-pair { display:flex; gap:10px; }
+.env-slot { flex:1 1 0; min-width:0; }
+.env-img {
+  width:100%; aspect-ratio:3/4; object-fit:cover; display:block;
+  border-radius:11px; background:rgba(255,255,255,.04);
+}
+.env-label {
+  margin-top:6px; text-align:center; font-size:12px; color:#a8a7a1;
+  letter-spacing:.04em;
+}
+.env-slot.empty .env-ph {
+  width:100%; aspect-ratio:3/4; border-radius:11px;
+  border:1px dashed rgba(255,255,255,.14); background:rgba(255,255,255,.02);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-size:12px; color:#77766f; text-align:center; line-height:1.6;
+}
+.env-slot.empty .env-ph span { font-size:11px; color:#5f5e58; }
+
 .track-pending {
   font-size:12.5px; color:#EF9F27; line-height:1.55;
   margin-top:10px; padding-top:10px;

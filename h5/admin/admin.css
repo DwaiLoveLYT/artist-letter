@@ -266,6 +266,40 @@ button { cursor:pointer; border:none; background:none; color:inherit; }
 .sh-preview { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; }
 .sh-preview img { width:74px; height:74px; object-fit:cover; border-radius:9px; }
 
+/* 凭证的三个固定位置（信封正面 / 反面 / 投递视频）。
+   空位也要占地方 —— 「还没传」本身就是要让他一眼看见的信息，
+   藏起来的话他会以为已经传过了。 */
+.pv-slot, .pv-add {
+  position:relative; width:96px; height:96px; border-radius:10px; overflow:hidden;
+  border:1px solid rgba(255,255,255,.09); background:rgba(255,255,255,.03);
+  padding:0; cursor:pointer; display:block; flex:0 0 auto;
+}
+.pv-slot img, .pv-slot video { width:100%; height:100%; object-fit:cover; display:block; }
+.pv-tag {
+  position:absolute; left:0; right:0; bottom:0; padding:2px 5px;
+  font-size:10.5px; color:#e8e7e2; background:rgba(0,0,0,.55);
+  text-align:center; letter-spacing:.03em;
+}
+.pv-play {
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:26px; height:26px; border-radius:50%; background:rgba(0,0,0,.5);
+  color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+}
+.pv-ops { position:absolute; right:3px; top:3px; display:flex; gap:3px; }
+.pv-ops b {
+  width:19px; height:19px; border-radius:50%; background:rgba(0,0,0,.6);
+  color:#e8e7e2; font-size:11px; font-weight:400; line-height:19px; text-align:center;
+  cursor:pointer;
+}
+.pv-add {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  border-style:dashed; border-color:rgba(239,159,39,.4); color:#EF9F27;
+  font-size:11px; line-height:1.3;
+}
+.pv-add .pv-plus { font-size:17px; line-height:1; }
+.pv-add small { font-size:10.5px; color:#c8a15e; }
+
 /* ==================== 新建订单表单 ==================== */
 .mini-field { margin-bottom:10px; }
 .mini-label { font-size:12.5px; color:#7d7d75; margin-bottom:5px; }

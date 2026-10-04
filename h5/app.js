@@ -353,10 +353,16 @@ function stampText(ts){
 // 之后每次打开页面 / 回到前台 / 联网都会自动补推 ——
 // 所以「点了下单、那一瞬间网络抖了一下」不会再让这一单永久消失。
 function setCloudState(kind, r){
+  const title = document.getElementById('success-title')
+  if(title){
+    title.textContent = kind === 'ok' ? '订单已送达客服台账'
+      : kind === 'pending' ? '订单号已生成 · 正在送达'
+      : '订单号已生成 · 尚未送达'
+  }
   const st = document.getElementById('cloud-state')
   if(!st) return
   if(kind === 'pending'){
-    st.innerHTML = '<div class="cloud-pending">正在把你的订单直接送到我这边…</div>'
+    st.innerHTML = '<div class="cloud-pending">正在送达云端台账。请保持页面打开，直到这里显示「已送达」；若未成功，请在微信里手动发给客服。</div>'
     return
   }
   if(kind === 'ok'){
@@ -364,8 +370,8 @@ function setCloudState(kind, r){
     return
   }
   if(kind === 'queued'){
-    st.innerHTML = '<div class="cloud-warn">⚠️ 这一单暂时没送出去，已经排上队了 —— '
-      + '网络一好会自动补发。<b>保险起见，还是点上面那个「发给客服」发我一次。</b></div>'
+    st.innerHTML = '<div class="cloud-warn">⚠️ 我这边还没有收到这笔订单。订单暂存在你这台设备，联网后会尝试补发，'
+      + '但请<b>现在点「发给客服」→在微信选客服→点发送</b>，不要只看见订单号就离开。</div>'
     return
   }
   st.innerHTML = '<div class="cloud-warn">⚠️ 没能直接送到我这边（'
@@ -374,6 +380,7 @@ function setCloudState(kind, r){
 
 function cloudWhy(r){
   if(!r) return '未知原因'
+  if(r.queue_failed) return '这台设备无法保存待补发订单'
   if(r.net) return '网络不通'
   if(r.off) return '同步未开启'
   if(r.status === 429) return '请求太频繁'
@@ -382,11 +389,16 @@ function cloudWhy(r){
 }
 
 function syncOrderToCloud(order){
-  if(!window.Cloud || !Cloud.on()) return
+  if(!window.Cloud || !Cloud.on()){
+    setCloudState('fail', { off:true })
+    return
+  }
   setCloudState('pending')
   Cloud.pushOrder(order).then(r => {
     if(r && r.ok){
       updOrder(order.id, { cloud_at: Date.now() })
+      // 客户可能在上一笔还没回话时又提交了下一笔：旧请求不能把当前页误写为成功。
+      if(lastOrderId !== order.id) return
       setCloudState('ok')
       const tip = document.getElementById('save-tip')
       if(tip){
@@ -517,7 +529,8 @@ function payGuideHtml(o){
           <b>没看到「已经直接送到我这边了」</b>，就把订单信息复制发我一次；
           <b>看到了</b>，可以跳过这一步。
         </div>
-        <button class="btn btn-large" onclick="shareOrderInfo()">发给客服（一键分享）</button>
+        <button class="btn btn-large" onclick="shareOrderInfo()">发给客服（打开分享面板）</button>
+        <div class="tiny" style="margin:8px 0;color:#e8c48f;line-height:1.7;">网页不会自动给你的微信发消息：打开分享面板后，还要选中客服微信并点「发送」。</div>
         <button class="btn-ghost" onclick="copyOrderInfo()">复制下单信息</button>
         <div id="cloud-state"></div>
       </div>
@@ -682,6 +695,13 @@ async function lookupOrder(){
   }
   if(r && r.status === 503){
     out.innerHTML = '<div class="lookup-err">现在查不到（同步服务暂时不通），稍等再试一次</div>'
+    return
+  }
+  // 服务端要求必须带手机号后 4 位 —— 只凭订单号读不到整单（客户姓名/手机号/地址）。
+  // 正常路径走不到这里（上面已经校验过 4 位），留着是给「旧版页面缓存」兜底，
+  // 免得它把 400 显示成「没找到这一单」。
+  if(r && r.status === 400 && r.error === 'need_phone'){
+    out.innerHTML = '<div class="lookup-err">要填一下下单用的手机号<b>后 4 位</b>才能查</div>'
     return
   }
   // 404 / 网络 / 其他 —— 一律说「没找到」，不暴露技术细节

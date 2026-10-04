@@ -190,12 +190,16 @@
       已带出你上次填的称呼、手机号和回信地址，有变动直接改就行
     </div>
     <div class="form-progress">
-      <div class="form-progress-step active">填信息</div>
+      <div class="form-progress-step active">填信息 <span class="form-progress-count" id="fp-count">0/5</span></div>
       <div class="form-progress-line"></div>
       <div class="form-progress-step">付款</div>
       <div class="form-progress-line"></div>
       <div class="form-progress-step">完成</div>
     </div>
+    <!-- 进度条只说明「走到哪一步」，不说「还差什么」。下面这两条补的就是后者：
+         长表单最劝退的时刻，是填到一半不确定自己还缺几项。 -->
+    <div class="form-fill-bar"><div class="form-fill-bar-in" id="fp-fill"></div></div>
+    <div class="form-fill-hint" id="fp-hint"></div>
 
     <div class="card form-card">
       <div class="form-section-title">收件信息</div>

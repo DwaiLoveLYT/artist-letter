@@ -352,11 +352,28 @@
   </div>
   <div class="wrap">
     <div id="track-warn"></div>
+
+    <!-- 换设备查询：常驻卡片，不管本机有没有单都能用 -->
+    <div class="card lookup-card">
+      <div class="card-title">在这台设备没看到订单？</div>
+      <div class="lookup-sub">订单保存在你当时下单的那台浏览器里。换个手机、清缓存、换浏览器，就看不到。<br>用<b>订单号 + 手机号后 4 位</b>可以查回任意设备下的单。</div>
+      <div class="lookup-form">
+        <input class="input lookup-input" id="lookup-no" placeholder="订单号（AL20261004ABCDEF）" autocapitalize="characters" spellcheck="false">
+        <input class="input lookup-input" id="lookup-phone" placeholder="下单手机号后 4 位" inputmode="numeric" maxlength="4" pattern="\d{4}">
+        <button class="btn lookup-btn" onclick="lookupOrder()">查询这一单</button>
+      </div>
+      <div id="lookup-result"></div>
+    </div>
+
+    <div class="section-header" id="track-local-head" style="margin-top:20px;">
+      <h2 class="section-title">本机的订单</h2>
+      <span class="section-more">下单当时用的那台浏览器</span>
+    </div>
     <div id="track-list"></div>
     <div class="empty-state" id="track-empty">
       <div class="empty-icon">📭</div>
       <div class="empty-title">这台设备上还没有订单</div>
-      <div class="empty-desc">订单保存在你当前浏览器的本地，换设备或清理缓存后就查不到了</div>
+      <div class="empty-desc">用上面那张卡片查一下别的设备下的单</div>
       <button class="btn" onclick="goPage('order')">去下单</button>
       <button class="btn-ghost" id="empty-wx-btn" onclick="copyContactWx()">用订单号找客服查</button>
     </div>

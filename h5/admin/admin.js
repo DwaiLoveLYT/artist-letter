@@ -941,6 +941,8 @@ function doReconcile(){
           : '<b>注意：这台设备此刻没接通云端同步</b>，你看到的不一定是全部订单。先点下面看诊断。')
       + '</div>'
       + '<button class="btn-full grey" style="margin-top:10px" onclick="closeSheet();openCloudDiag()">看云端同步诊断 ›</button>'
+      + '<div class="sh-gap"></div>'
+      + '<button class="btn-full grey" onclick="closeSheet();showSelfCheck()">本机自检 ›</button>'
     return
   }
   const o = hits[0]

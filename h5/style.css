@@ -467,10 +467,34 @@ body {
    所以给它们一个稳定的、永远都在的位置（还没传时显示占位，而不是整块消失）。 */
 .env-pair { display:flex; gap:10px; }
 .env-slot { flex:1 1 0; min-width:0; }
+/* 图片没到位之前先占住位置、并且「会呼吸」。
+   客户那边（实测）每连接只有 ~45KB/s，一张图要等好几秒 ——
+   一块会动的灰底是「正在来」，一块死灰是「坏了」。
+   占位尺寸靠 aspect-ratio 提前定好，所以图片加载完也不会把整页顶一下。 */
 .env-img {
   width:100%; aspect-ratio:3/4; object-fit:cover; display:block;
   border-radius:11px; background:rgba(255,255,255,.04);
 }
+.env-img, .gallery-img {
+  background-image:linear-gradient(100deg,
+    rgba(255,255,255,.03) 30%, rgba(255,255,255,.09) 50%, rgba(255,255,255,.03) 70%);
+  background-size:220% 100%;
+  animation:shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  0% { background-position:120% 0; }
+  100% { background-position:-20% 0; }
+}
+/* 动效敏感的人不该被一块一直闪的灰底烦到 —— 换成静态底色 */
+@media (prefers-reduced-motion: reduce) {
+  .env-img, .gallery-img { animation:none; background-image:none; }
+}
+/* 图到位了（或确定加载不出来）就停掉呼吸动画 */
+.env-img.img-loaded, .gallery-img.img-loaded,
+.env-img.img-failed, .gallery-img.img-failed {
+  animation:none; background-image:none;
+}
+.env-img.img-failed, .gallery-img.img-failed { background:rgba(255,255,255,.04); }
 .env-label {
   margin-top:6px; text-align:center; font-size:12px; color:#a8a7a1;
   letter-spacing:.04em;

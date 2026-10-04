@@ -402,7 +402,7 @@ function payGuideHtml(o){
         <button class="btn btn-large pay-tail-btn" onclick="copyText('${t}')">复制这 4 位</button>
       </div>
 
-      <div class="pay-why">填上这 4 位，我一看到账就知道钱是你付的。</div>
+      <div class="pay-why">转账时我这边看不到订单内容 —— 备注里填上这 4 位，我一看到账就知道钱是你付的。</div>
 
       <div class="pay-methods">
 

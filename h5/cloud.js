@@ -17,7 +17,7 @@
 // （旧地址直接返回一张营销页）。所以**每次重新发布之后，必须把新地址更新到这里
 // 并重推一次 GitHub Pages**，否则线上客户页会连到一个死地址 ——
 // 而本地测试完全发现不了这件事（本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE = 'https://8f1cf1e01bd7419e90f3ab7257870ab5.sg2.agentos-app.run'
+var CLOUD_BASE = 'https://ae1556c6d4554922b72419d0d0753279.sg2.agentos-app.run'
 
 // 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）
 try {

@@ -291,11 +291,11 @@
 <section class="page" id="page-success">
   <div class="nav-bar">
     <button class="nav-back" onclick="goPage('home')" aria-label="返回首页">←</button>
-    <span>订单已提交</span>
+    <span>提交状态</span>
   </div>
   <div class="wrap">
     <div class="success-check">✓</div>
-    <div class="success-title">订单已生成</div>
+    <div class="success-title" id="success-title">订单号已生成 · 待确认送达</div>
     <div class="success-sub" id="s-order-no"></div>
     <div class="order-no-copy">
       <button class="btn-ghost" onclick="copyOrderNo()">复制订单号</button>
@@ -306,8 +306,8 @@
 
     <div class="save-tip save-tip-warn" id="save-tip">
       ⚠️ <b>订单信息一定要发我微信</b><br>
-      订单只存在你这台设备的浏览器里，我这边没有。付款后点上面那个「发给客服」发我一次 ——
-      不然我收到钱，也不知道是谁的单。
+      云端还没有确认收到，你现在看到的订单号可能只保存在这台设备。
+      没看到下方的「已送达」前，请点「发给客服」并在微信里选中客服、点发送；否则我可能看不到这一单。
     </div>
 
     <!-- 客服联系（按当天自动标出该找谁） -->

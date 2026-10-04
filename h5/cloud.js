@@ -18,7 +18,7 @@
 // 并重推一次 GitHub Pages**（用 letter-api/set-endpoint.js 一条命令改完四处），
 // 否则线上客户页会连到一个死地址 —— 而本地测试完全发现不了这件事
 // （本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE_DEFAULT = 'https://ae1556c6d4554922b72419d0d0753279.sg2.agentos-app.run'
+var CLOUD_BASE_DEFAULT = 'https://d91066707296476d83b5a721292a260b.sg2.agentos-app.run'
 var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
 // —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——

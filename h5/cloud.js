@@ -18,7 +18,7 @@
 // 并重推一次 GitHub Pages**（用 letter-api/set-endpoint.js 一条命令改完四处），
 // 否则线上客户页会连到一个死地址 —— 而本地测试完全发现不了这件事
 // （本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE_DEFAULT = 'https://d91066707296476d83b5a721292a260b.sg2.agentos-app.run'
+var CLOUD_BASE_DEFAULT = 'https://b82301f128154959b707dfd404c32285.sg2.agentos-app.run'
 var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
 // —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——
@@ -256,6 +256,112 @@ var Cloud = {
       body: JSON.stringify({ orders: orders, deleted: deleted || [] }),
     }).then(function(r){ return r.json().catch(function(){ return {} }) })
       .catch(function(){ return { ok:false, net:true } })
+  },
+
+  // —— 客户页：一次查多单 ——
+  //
+  // 为什么要有它：原来「我的订单」里每一单都单独打一次 GET /api/order/<no>，
+  // 6 单就是 6 次请求。而单条查单是 30 次/小时/IP ——
+  // 客户点几下「刷新进度」额度就见底，然后看到「查询有点频繁」。
+  //
+  // 那不是限流值写错了，是**接口粒度选错了**：客户要的是
+  // 「我这几单现在各是什么状态」，本来就该是一次请求。
+  //
+  // 服务端版本可能比前端旧（两边分开发），所以第一次撞到 404 就记下来，
+  // 之后不再试，直接退回逐单查 —— 否则每次刷新都白打一个 404。
+  _batchOk: null,
+  lookupOrders: function(items){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    var self = this
+    if(self._batchOk === false) return Promise.resolve({ ok:false, unsupported:true })
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+    var timer = ctl ? setTimeout(function(){ ctl.abort() }, 20000) : null
+    return fetch(CLOUD_BASE + '/api/orders/lookup', {
+      method: 'POST', signal: ctl ? ctl.signal : undefined,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items }),
+    }).then(function(r){
+      return r.json().catch(function(){ return {} }).then(function(j){
+        j.status = r.status
+        if(r.status === 404 || r.status === 400 && j.error === 'bad_items') self._batchOk = false
+        else if(r.ok) self._batchOk = true
+        return j
+      })
+    }).catch(function(){ return { ok:false, net:true } })
+      .then(function(j){ if(timer) clearTimeout(timer); return j })
+  },
+
+  // —— 后台：上传媒体（信封正反面照片 / 投递视频）——
+  //
+  // 媒体**不能**只存在后台那台设备上：以前存的是 URL.createObjectURL(file)，
+  // 那是一个只在「创建它的那次会话」里有效的 blob 地址 ——
+  // 后台自己看着好好的，客户那台手机上永远是打不开的。
+  //
+  // 所以必须真的传上来。base64 而不是 multipart：这个服务一直是零依赖，
+  // 而 multipart 解析要引依赖或自己写解析器；base64 体积涨 1/3，图片/短视频可以接受。
+  uploadMedia: function(key, orderNo, kind, file, onProgress){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    return new Promise(function(resolve){
+      var fr = new FileReader()
+      fr.onerror = function(){ resolve({ ok:false, read_error:true }) }
+      fr.onload = function(){
+        var data = String(fr.result || '')
+        var comma = data.indexOf(',')
+        if(comma > 0) data = data.slice(comma + 1)
+        var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+        // 大文件走几十秒是正常的（实测 12MB 上传在 20 秒量级），
+        // 超时给足，否则视频永远「上传失败」，而其实只是慢。
+        var timer = ctl ? setTimeout(function(){ ctl.abort() }, 180000) : null
+        if(onProgress) { try { onProgress('uploading') } catch(e){} }
+        fetch(CLOUD_BASE + '/api/media', {
+          method: 'POST', signal: ctl ? ctl.signal : undefined,
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+          body: JSON.stringify({
+            order_no: orderNo, kind: kind, name: file.name, mime: file.type, data: data,
+          }),
+        }).then(function(r){
+          return r.json().catch(function(){ return {} }).then(function(j){
+            j.status = r.status
+            return j
+          })
+        }).catch(function(e){
+          return { ok:false, net:true, aborted: !!(e && e.name === 'AbortError') }
+        }).then(function(j){ if(timer) clearTimeout(timer); resolve(j) })
+      }
+      fr.readAsDataURL(file)
+    })
+  },
+
+  // —— 后台：删除媒体 ——
+  deleteMedia: function(key, orderNo, file){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    return fetch(CLOUD_BASE + '/api/media', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+      body: JSON.stringify({ order_no: orderNo, file: file }),
+    }).then(function(r){ return r.json().catch(function(){ return {} }) })
+      .catch(function(){ return { ok:false, net:true } })
+  },
+
+  // 把媒体记录拼成一个能直接塞进 <img src> / <video src> 的地址。
+  //
+  // 地址是**相对路径**（/api/media/...），存进数据里的是相对路径 ——
+  // 存绝对地址会把「当前这个后端域名」焊死在订单里，
+  // 而后端地址每次重新发布都会变（已经换过 8 次）。
+  // 手机号后 4 位是这道门禁的另一半：媒体里印着客户收信地址，不能公开。
+  mediaUrl: function(rec, phone){
+    if(!rec || !rec.path) return ''
+    // 老数据里可能存的是 blob: / data: 地址。
+    // blob: 是**只在创建它的那次会话里有效**的临时地址 —— 换台设备、换个会话就是死链，
+    // 而这正是「投递视频客户端加载不出来」的真身。
+    // 这里返回空串（＝当它不存在），让页面显示「还没上传」，
+    // 而不是渲染一个永远转圈 / 裂图的播放器 —— 那看起来像「你做的视频有问题」。
+    if(/^(blob|data):/i.test(rec.path)) return ''
+    if(/^https?:\/\//i.test(rec.path)) return rec.path        // 历史数据兜底：绝对地址
+    var tail = String(phone || '').replace(/\D/g, '').slice(-4)
+    var u = CLOUD_BASE + rec.path
+    if(tail.length === 4) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'phone=' + encodeURIComponent(tail)
+    return u
   },
 
   // —— 后台：服务端连通性 ——

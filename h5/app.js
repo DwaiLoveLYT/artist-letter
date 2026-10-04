@@ -51,11 +51,10 @@ function copyContactWx(){ copyText(wxId()) }
 const RECEIVE_ADDR = '中国广东省深圳市南山区泉园路61号绿茵丰和，直接放东门保安室。188888888'
 const PAY_QR = 'images/pay-qr.jpg'
 
-// ⚠ 收款二维码开关：默认 false。
-// 上传到自己图床的真实微信收款码之后，把这个改成 true。
-// 默认是 false 的原因：占位图/模板图会让客户扫了把钱付给别人 ——
-// 这是「钱付错了人」的不可逆事故，所以新装/换图必须**显式**打开。
-const PAY_QR_READY = false
+// 收款二维码开关。
+// 图挂了就等于客户付不了款，所以留一个开关方便紧急下线；默认开启。
+// （曾经误以为 images/pay-qr.jpg 是占位图而关掉过 —— DWAY 确认那是他本人的收款码。）
+const PAY_QR_READY = true
 
 // ==================== 状态机 ====================
 const STATUS_FLOW = [

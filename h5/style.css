@@ -468,6 +468,21 @@ body {
   border-top:1px solid rgba(255,255,255,0.05);
 }
 
+/* 「这一单还没送到客服那边」—— 必须显形，不能和正常单长得一样 */
+.track-orphan {
+  font-size:12.5px; color:#EF9F27; line-height:1.55;
+  margin-top:10px; padding:8px 10px; border-radius:9px;
+  background:rgba(239,159,39,.09);
+  border:1px solid rgba(239,159,39,.3);
+}
+/* 后台明确删过这一单（服务端回了 tombstoned）—— 灰掉，别再让客户惦记 */
+.track-voided {
+  font-size:12.5px; color:#8a929c; line-height:1.55;
+  margin-top:10px; padding:8px 10px; border-radius:9px;
+  background:rgba(255,255,255,.03);
+  border:1px dashed rgba(255,255,255,.12);
+}
+
 /* 换设备查订单：常驻卡片 */
 .lookup-card { padding:16px 16px 14px; }
 .lookup-sub {

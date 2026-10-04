@@ -18,7 +18,7 @@
 // 并重推一次 GitHub Pages**（用 letter-api/set-endpoint.js 一条命令改完四处），
 // 否则线上客户页会连到一个死地址 —— 而本地测试完全发现不了这件事
 // （本地是用 localStorage 覆盖这个常量的，走不到这里）。
-var CLOUD_BASE_DEFAULT = 'https://df8d9da59d08436682a9201d49fb8704.sg2.agentos-app.run'
+var CLOUD_BASE_DEFAULT = 'https://421b68cbbaa645ebb4ddc4f8a3452a55.sg2.agentos-app.run'
 var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
 // —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——
@@ -383,6 +383,27 @@ var Cloud = {
       })
       .catch(function(){ return { ok:false, net:true } })
       .then(function(j){ clearTimeout(timer); return j })
+  },
+
+  // —— 后台：云端哨兵的体检结论 ——
+  //
+  // 为什么后台要显示它：老板的电脑会关机，GitHub 的定时任务又跑不起来
+  // （改 workflow 文件需要额外权限，拿不到）。所以巡检改由**云端服务自己**做 ——
+  // 它跟这台服务器一起活，老板关不关机跟它无关。
+  // 这个接口读的就是那份结论，让老板在任何设备上打开后台都能一眼看到「线上还好吗」。
+  //
+  // 服务端版本较旧时这个接口不存在 → 404，调用方要按「还没有」处理，别当成故障。
+  // run=1 会让云端**立刻再做一次体检**（后台那个「现在就体检」按钮用）。
+  patrol: function(key, run){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    return fetch(CLOUD_BASE + '/api/patrol' + (run ? '?run=1' : ''), {
+      headers: { 'X-Admin-Key': key }, cache:'no-store',
+    }).then(function(r){
+      return r.json().catch(function(){ return {} }).then(function(j){
+        j.status = r.status
+        return j
+      })
+    }).catch(function(){ return { ok:false, net:true } })
   },
 
   // —— 后台：服务端请求留痕（排障用）——

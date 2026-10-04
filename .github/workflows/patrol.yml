@@ -1,0 +1,35 @@
+name: 线上巡检
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  patrol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 跑巡检
+        run: bash tools/patrol.sh
+
+      - name: 出问题时开一张单子
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --title "⚠️ 线上巡检没通过（$(date -u '+%Y-%m-%d %H:%M') UTC）" --body "自动巡检发现异常，请打开 WorkBuddy 里的「订单同步系统巡检」做深度检查与修复。运行记录：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true
+
+      - name: 恢复正常时自动把单子关掉
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for n in $(gh issue list --state open --search "线上巡检没通过 in:title" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "巡检已恢复正常（$(date -u '+%Y-%m-%d %H:%M') UTC），自动关闭。" || true
+          done

@@ -78,7 +78,9 @@ let cloudTimer = null
 let cloudTotal = -1           // 服务端台账单数（GET /api/ledger 的 total）
 let cloudReconciled = null    // 服务端这次读台账有没有对账成功
 let cloudFresh = []           // 本次拉取新进来的单（用来提示 + 高亮）
-const freshNos = new Set()    // 高亮中的订单号（点开卡片后消失）
+let cloudUpdated = []         // 本机已有、但状态被别处改过的单（同样要提示）
+const freshNos = new Set()    // 新单高亮（点开卡片后消失）
+const updNos   = new Set()    // 「有更新」高亮（同样点开即撤）
 let cloudPollTimer = null
 const CLOUD_POLL_MS = 25000
 
@@ -164,10 +166,35 @@ async function cloudPull(silent){
       + cloudFresh.slice(0, 6).map(o => tail(o.order_no)).join(' ')
       + (cloudFresh.length > 6 ? ' …' : ''))
   }
+
+  // —— 本机已有、但状态被别处改过的单 ——
+  //
+  // 「我更新了进度，其他设备看不到」的另一半就在这里：
+  // 光是**新单**进来还不够，**状态变化**也必须进来。
+  // 之前只提示新单，所以另一台设备上改了状态、这一台虽然数据已经更新了，
+  // 却没有任何提示 —— 看上去就像「没同步」。
+  //
+  // 判断依据是合并前后本机那一份的差异：状态、收款、地址这三样是客户真正会感知的。
+  const beforeMap = new Map(localBefore.filter(o => o.order_no).map(o => [o.order_no, o]))
+  cloudUpdated = merged.filter(o => {
+    const b = beforeMap.get(o.order_no)
+    if(!b) return false
+    return b.status !== o.status
+        || b.pay_status !== o.pay_status
+        || String(b.recipient_addr || '') !== String(o.recipient_addr || '')
+  })
+  if(cloudUpdated.length){
+    if(cloudUpdated.length <= 8) cloudUpdated.forEach(o => updNos.add(o.order_no))
+    toast('云端更新了 ' + cloudUpdated.length + ' 单的进度 · 尾号 '
+      + cloudUpdated.slice(0, 6).map(o => tail(o.order_no)).join(' ')
+      + (cloudUpdated.length > 6 ? ' …' : ''))
+  }
+
   renderList()
   // 本地可能比云端多（上次没推成功的改动）—— 拉完顺手推一次补齐
   cloudPush(true)
-  return { ok:true, added: Math.max(0, merged.length - localBefore.length), fresh: cloudFresh.length }
+  return { ok:true, added: Math.max(0, merged.length - localBefore.length),
+           fresh: cloudFresh.length, updated: cloudUpdated.length }
 }
 
 async function cloudPush(silent){
@@ -1474,13 +1501,18 @@ function orderCard(o){
   const logs  = Array.isArray(o.logs)  ? o.logs  : []
   const lookup = needLookup(o)
   const addrText = String(o.recipient_addr || '').trim()
+  // 「刚进来」和「有更新」是两件事，标签必须分开 ——
+  // 客户新下的单你要去接，别人改过的进度你要去核，动作不一样。
+  const isNew = freshNos.has(o.order_no)
+  const isUpd = !isNew && updNos.has(o.order_no)
+  const mark  = isNew || isUpd
 
   return `
-  <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''} ${freshNos.has(o.order_no) ? 'fresh' : ''}" id="od-${o.id}">
+  <div class="order ${cls} ${openIds.has(o.id) ? 'open' : ''} ${mark ? 'fresh' : ''}" id="od-${o.id}">
     <div class="o-top" onclick="toggle('${o.id}')">
       <div>
         <div class="o-no">${esc(tail(o.order_no))}<small>${esc(o.order_no)}</small></div>
-        <div class="o-artist">${esc(o.artist || '（未填艺人）')}${freshNos.has(o.order_no) ? ' <span class="o-new">刚进来</span>' : ''}</div>
+        <div class="o-artist">${esc(o.artist || '（未填艺人）')}${mark ? ` <span class="o-new">${isNew ? '刚进来' : '有更新'}</span>` : ''}</div>
       </div>
       <div class="o-tags">
         <span class="tag ${paid ? 'green' : 'amber'}">${paid ? '已收款' : '待收款'}</span>
@@ -1545,8 +1577,11 @@ function toggle(id){
 
 function clearFresh(id, el){
   const o = getOrder(id)
-  if(!o || !freshNos.has(o.order_no)) return
+  if(!o) return
+  const had = freshNos.has(o.order_no) || updNos.has(o.order_no)
+  if(!had) return
   freshNos.delete(o.order_no)
+  updNos.delete(o.order_no)
   el.classList.remove('fresh')
   const badge = el.querySelector('.o-new')
   if(badge) badge.remove()

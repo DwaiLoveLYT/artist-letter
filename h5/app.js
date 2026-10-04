@@ -614,6 +614,11 @@ function renderTrack(){
   if(localHead) localHead.style.display='block'
   listEl.innerHTML=orders.map(o=>{
     const pending = o.addr_lookup && !String(o.recipient_addr||'').trim()
+    // 服务端从没确认过这一单 —— 它可能根本没送到我这边。
+    // 以前这种情况在页面上和正常单长得一模一样，客户不会知道、我也不会知道，
+    // 一直到客户来催才发现。现在必须显形。
+    const orphan = !o.cloud_at && !o.voided
+    const voided = !!o.voided
     return `
     <div class="card track-card" onclick="goPage('detail','${o.id}')">
       <div class="row"><div class="row-key">订单号</div><div class="row-val">${escapeHtml(o.order_no)}</div></div>
@@ -621,6 +626,8 @@ function renderTrack(){
       <div class="row"><div class="row-key">状态</div><div class="row-val"><span class="${tagClass(o.status)}">${statusLabel(o.status)}</span></div></div>
       <div class="row"><div class="row-key">下单</div><div class="row-val">${fmtTimeHuman(o.created_at)}</div></div>
       ${pending?`<div class="track-pending">📍 地址我在查，查到会更新到这里，不用催</div>`:''}
+      ${orphan?`<div class="track-orphan">⚠️ 这一单还没送到我这边 · 正在自动补发。<br>稳妥起见，也请把订单号发我一次。</div>`:''}
+      ${voided?`<div class="track-voided">这一单已作废（客服已取消），不用再管它</div>`:''}
     </div>`
   }).join('')
 }
@@ -730,6 +737,21 @@ async function lookupOrder(){
 const REFRESH_ONE_MS = 60000
 const REFRESH_MAX    = 6
 
+// 「这一单服务端根本没有」——必须补发，不能默默跳过。
+//
+// 为什么：客户点下单时，如果那一下正好网络不通 / 服务端在重启，订单会留在本机。
+// 正常情况它落进补推队列，之后自动补上。但如果那一单是在**旧版页面**上产生的
+// （旧版是「3 次尝试都失败之后才落队列」，页面中途被关掉就永远不进队列），
+// 它就变成一单孤儿：躺在「我的订单」里，看着和正常单一样，服务端却从来没有过它。
+//
+// 真实事故：线上留痕里有一台 iPhone 每 60 秒来查 3 个订单号，
+// 服务端每次都回 404 —— 那 3 单从来没到过我这边，而客户手机上它们看起来是正常的。
+//
+// 所以：查到 404 且这一单从没被服务端确认过 → 就地重发一次（服务端按单号幂等，
+// 重复到达不会建出两张单）。同时限流，别把查单接口打成重发接口。
+const REPUSH_GAP_MS = 10 * 60 * 1000   // 同一单 10 分钟内最多补发一次
+const REPUSH_MAX    = 2                // 一轮刷新里最多补发 2 单（查单接口限流 30 次/小时）
+
 // 客户端该认服务端的哪些字段。
 // 刻意**不含** admin_note：服务端不会把它给客户端（那是后台内部备注），
 // 放进来只会在每次刷新时把本机那份抹掉。
@@ -785,7 +807,9 @@ async function doRefreshOrders(o){
   if(!all.length){ syncLine('', ''); return { ok:true, checked:0 } }
 
   const now = Date.now()
-  let pool = all.filter(x => x.order_no)
+  // 被后台明确作废的单（服务端回 tombstoned）不再轮询 —— 它已经被删了，
+  // 反复去问只会白白占掉查单额度。
+  let pool = all.filter(x => x.order_no && !x.voided)
   if(o.only) pool = pool.filter(x => x.id === o.only)
   // 最久没刷过的排前面 —— 单子多的时候自然轮转
   pool.sort((a,b) => (Number(a.sync_at)||0) - (Number(b.sync_at)||0)
@@ -805,7 +829,7 @@ async function doRefreshOrders(o){
 
   syncLine('正在同步最新进度…', 'busy')
 
-  let checked = 0, changed = 0, failed = 0, limited = false
+  let checked = 0, changed = 0, failed = 0, limited = false, repushed = 0
   for(const ord of targets){
     let r = null
     try { r = await Cloud.lookupOrder(ord.order_no, ord.customer_phone) } catch(e){ r = null }
@@ -814,15 +838,48 @@ async function doRefreshOrders(o){
     if(r && r.ok && r.order){
       checked++
       const patch = serverPatch(ord, r.order)
+      // 服务端查得到 = 这一单确实送到过。补上「已送达」标记 ——
+      // 否则旧版本产生的单会一直挂着「还没送到我这边」的假警告。
+      if(!ord.cloud_at) patch.cloud_at = Date.now()
       if(Object.keys(patch).length) changed++
       updOrder(ord.id, Object.assign(patch, { sync_at: Date.now() }))
       continue
     }
-    // 404 / 400 = 这一单服务端查不到（还没推上去，或手机尾号对不上）——
-    // 这不是「同步坏了」，是这一单本来就没上去，不该拿它吓客户。
-    if(r && (r.status === 404 || r.status === 400)){ continue }
+    // 404 / 400 = 这一单服务端查不到。
+    //   手机尾号对不上 → 补发也救不回来（服务端按单号幂等，不会建出第二张）
+    //   真的没上去   → 补发就是唯一的救命手段，绝不能默默跳过
+    if(r && (r.status === 404 || r.status === 400)){
+      const neverConfirmed = !ord.cloud_at
+      const cooled = now - (Number(ord.repush_at) || 0) > REPUSH_GAP_MS
+      if(r.status === 404 && neverConfirmed && cooled && repushed < REPUSH_MAX){
+        repushed++
+        let pr = null
+        try { pr = await Cloud.pushOrder(ord, { tries: 2 }) } catch(e){ pr = null }
+        if(pr && pr.ok){
+          if(pr.tombstoned){
+            // 服务端说「这单我删过」→ 本机也标作废，之后不再轮询它
+            updOrder(ord.id, { voided: true, voided_at: Date.now(), sync_at: Date.now() })
+          }else{
+            // 补发成功：这一单从「孤儿」变回正常单，后台立刻就能看到
+            updOrder(ord.id, { cloud_at: Date.now(), sync_at: Date.now() })
+            checked++
+          }
+          changed++
+          continue
+        }
+        // 补发没成（网络抖了）→ 只记个时间戳等下一轮。
+        // 不在这里报错：pushOrder 已经把它放进持久补推队列，下次打开页面还会再来。
+        updOrder(ord.id, { repush_at: Date.now() })
+        continue
+      }
+      continue
+    }
     failed++
   }
+
+  // 本机所有「服务端从来没确认过」的单（含这一轮没轮到的）——
+  // 状态行按它说话，不能因为这一轮只刷了 6 单就漏报。
+  const orphans = allOrders().filter(x => x.order_no && !x.cloud_at && !x.voided)
 
   // 状态变了 → 重渲染。必须先渲染再写状态行：renderDetail 会重建 #detail-sync。
   const cur = document.querySelector('.page.active')
@@ -838,6 +895,9 @@ async function doRefreshOrders(o){
   }else if(checked === 0 && failed){
     // 一单都没拉到 —— 必须说清「你现在看到的进度可能是旧的」，不能装作没事
     syncLine('⚠️ 没连上服务端，下面显示的进度可能是旧的' + syncRetryBtn, 'warn')
+  }else if(orphans.length){
+    // 有单子服务端从来没有过 —— 这句必须压过「已是最新」，否则等于报平安报错了
+    syncLine('⚠️ 有 ' + orphans.length + ' 单还没送到我这边，正在自动补发' + syncRetryBtn, 'warn')
   }else if(changed){
     syncLine('✓ 进度刚刚更新过')
   }else{

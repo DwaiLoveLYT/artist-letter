@@ -167,7 +167,8 @@ fi
 # 它证明的是「路由在、body 能解析、校验逻辑在跑」—— 而 health 绿并不能证明这些。
 #
 # ⚠ 副作用（预期，不是故障）：/api/logs 里会多一条来自 GitHub 出口 IP 的
-#   「结构不合规」拒绝记录，每 6 小时一条。看到它别当成有人在攻击。
+#   「结构不合规」拒绝记录。看到它别当成有人在攻击。
+#   （频率跟着 cron 走：cron 改多久一次，这条留痕就多久一条。）
 if [ -n "$API" ]; then
   oc="$(curl -sS -o "$tmp/order.json" -w '%{http_code}' --max-time 30 --retry 2 --retry-delay 3 \
         -X POST -H 'Content-Type: application/json' -d '{}' "$API/api/order" 2>/dev/null || echo 000)"

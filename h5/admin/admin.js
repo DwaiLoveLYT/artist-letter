@@ -9,12 +9,18 @@ const PRICE     = 190
 const PIN_LEN   = 6
 const CONTACT_WX = 'IMDWAY'
 
+// ⚠ 必须和客户页 app.js 里那份 STATUS_FLOW 的 **key 与顺序**完全一致。
+// 两边不一致时，后台改完状态，客户端会显示成「处理中」，而且不会有任何报错。
+// label 故意不同：这里是他自己看的（「待开工」），客户页那份是给客户看的（「已收款，排队中」）。
+// 别为了「一致」把两边写成同一句话 —— 那两边都会变得不好用。
 const STATUS_FLOW = [
-  { key:'created', label:'待付款', hint:'订单已生成，等客户转账' },
-  { key:'paid',    label:'待开工', hint:'款已收到，排队安排绘制' },
-  { key:'drawing', label:'绘制中', hint:'手绘信封制作中' },
-  { key:'mailed',  label:'已寄出', hint:'已投递并录制视频，等待对方收取' },
-  { key:'done',    label:'已完成', hint:'寄出后 4–8 周无退回，视为送达' },
+  { key:'created', label:'待付款',   hint:'订单已生成，等客户转账' },
+  { key:'paid',    label:'待开工',   hint:'款已收到，排队安排绘制' },
+  { key:'drawing', label:'绘制中',   hint:'手绘信封制作中' },
+  { key:'drawn',   label:'绘制完成', hint:'信封画好了，核对细节、准备写信与贴票' },
+  { key:'packing', label:'准备寄出', hint:'信已封好、邮票已贴，等下一次投递' },
+  { key:'mailed',  label:'已寄出',   hint:'已投递并录制视频，等待对方收取' },
+  { key:'done',    label:'已完成',   hint:'寄出后 4–8 周无退回，视为送达' },
 ]
 const STATUS_MAP = {}
 STATUS_FLOW.forEach(s => STATUS_MAP[s.key] = s)
@@ -1556,7 +1562,6 @@ function renderList(){
 function orderCard(o){
   const paid = o.pay_status === 'paid'
   const cls = o.status === 'done' ? 'done' : (paid ? 'paid' : 'unpaid')
-  const media = Array.isArray(o.media) ? o.media : []
   const logs  = Array.isArray(o.logs)  ? o.logs  : []
   const lookup = needLookup(o)
   const addrText = String(o.recipient_addr || '').trim()
@@ -1600,14 +1605,7 @@ function orderCard(o){
       ${o.letter_note ? `<div class="d-note"><b style="color:#8a8a82">客户备注：</b><br>${esc(o.letter_note)}</div>` : ''}
       ${o.admin_note ? `<div class="d-note"><b style="color:#8a8a82">我的留言：</b><br>${esc(o.admin_note)}</div>` : ''}
 
-      ${media.length ? `
-        <div class="d-row" style="margin-top:10px"><div class="d-key">凭证</div>
-          <div class="d-val">${media.filter(m => m.kind === 'image').length} 张图 · ${media.filter(m => m.kind === 'video').length} 段视频</div>
-        </div>
-        <div class="sh-preview">
-          ${media.filter(m => m.kind === 'image').map(m => `<img src="${m.path}" onclick="viewImage('${m.path}')">`).join('')}
-          ${media.filter(m => m.kind === 'video').map(m => `<video src="${m.path}" style="width:74px;height:74px;border-radius:9px;object-fit:cover" controls playsinline></video>`).join('')}
-        </div>` : ''}
+      ${mediaStrip(o)}
 
       ${logs.length ? `
         <div class="d-row" style="margin-top:10px"><div class="d-key">操作记录</div>
@@ -1619,13 +1617,203 @@ function orderCard(o){
         <button class="op ${lookup ? 'primary' : ''}" onclick="sheetAddr('${o.id}')">${lookup ? '📍 补地址' : '改地址'}</button>
         <button class="op" onclick="sheetStatus('${o.id}')">改状态</button>
         <button class="op" onclick="sheetNote('${o.id}')">留言</button>
-        <button class="op" onclick="sheetMedia('${o.id}')">存凭证</button>
+        <button class="op" onclick="sheetMedia('${o.id}')">加过程图</button>
         <button class="op" onclick="copyFull('${o.id}')">复制全单</button>
         <button class="op" onclick="copyShip('${o.id}')">复制寄件地址</button>
         <button class="op danger" onclick="sheetDelete('${o.id}')">删除</button>
       </div>
     </div>
   </div>`
+}
+
+// ==================== 凭证（信封正反面 / 投递视频）====================
+//
+// 三个**固定位置**：信封正面、信封反面、投递视频。
+//
+// 为什么固定，而不是「上传了才出现」：
+// ① 客户最想看的就是这两张信封照 —— 它们必须永远在同一个地方，
+//    不然客户会以为「你没做」，只是自己没找到。
+// ② 上传过的东西必须是**真的传上去了**。以前这里存的是
+//    URL.createObjectURL(file) —— 一个只在「创建它的那次会话」里有效的 blob 地址。
+//    后台自己看着好好的，客户那台手机上永远打不开。
+//    这就是「投递视频客户端加载不出来」的真身。
+const MEDIA_SLOTS = [
+  { slot: 'front', kind: 'image', label: '信封正面', hint: '客户最想看的那一张' },
+  { slot: 'back',  kind: 'image', label: '信封反面', hint: '封口、贴票那一面' },
+  { slot: 'video', kind: 'video', label: '投递视频', hint: '一镜到底，越短越稳' },
+]
+// 后端硬上限 12MB（实测 Contents API 24MB 能写但要 28 秒，
+// 读取侧只有 blobs API 扛得住大文件，12MB 是「一定跑得动」的保守值）。
+const MEDIA_MAX_BYTES = 12 * 1024 * 1024
+
+function slotOf(o, slot){
+  const list = Array.isArray(o.media) ? o.media : []
+  const m = list.find(x => x && x.slot === slot) || null
+  // 老数据里可能存着 blob: 地址 —— 那是只在创建它的那次会话里有效的死链
+  // （这正是「投递视频客户端加载不出来」的真身）。当成「没有」处理：
+  // 宁可显示「待传」让他重传一次，也不要显示一个永远转圈的播放器 ——
+  // 那看起来像「我做的视频有问题」，而其实只是地址早就失效了。
+  if(m && !mediaSrc(o, m)) return null
+  return m
+}
+function extraMedia(o){
+  const list = Array.isArray(o.media) ? o.media : []
+  return list.filter(m => m && !m.slot && mediaSrc(o, m))
+}
+// 媒体地址现拼：订单里存的是相对路径（后端地址每次重发都会变，不能焊进数据里），
+// 而且必须带手机号后 4 位 —— 信封上印着客户真实收信地址。
+function mediaSrc(o, m){
+  return (window.Cloud && Cloud.mediaUrl) ? Cloud.mediaUrl(m, o.customer_phone) : (m.path || '')
+}
+function mb(n){ return (n / 1048576).toFixed(1) + 'MB' }
+
+function mediaStrip(o){
+  const extras = extraMedia(o)
+  return `
+    <div class="d-row" style="margin-top:10px"><div class="d-key">凭证</div>
+      <div class="d-val">${MEDIA_SLOTS.map(s => {
+        const m = slotOf(o, s.slot)
+        return m ? `${s.label} ✓` : `<span style="color:#EF9F27">${s.label} 待传</span>`
+      }).join(' · ')}${extras.length ? ' · 另外 ' + extras.length + ' 张' : ''}</div>
+    </div>
+    <div class="sh-preview">
+      ${MEDIA_SLOTS.map(s => {
+        const m = slotOf(o, s.slot)
+        if(!m){
+          return `<button class="pv-add" onclick="pickMedia('${o.id}','${s.slot}')">
+            <span class="pv-plus">＋</span><small>${s.label}</small></button>`
+        }
+        const src = mediaSrc(o, m)
+        const inner = s.kind === 'video'
+          ? `<video src="${src}" muted playsinline preload="metadata"></video><span class="pv-play">▶</span>`
+          : `<img src="${src}" alt="${s.label}">`
+        return `<div class="pv-slot">
+          ${inner}
+          <span class="pv-tag">${s.label}</span>
+          <span class="pv-ops">
+            <b onclick="event.stopPropagation();pickMedia('${o.id}','${s.slot}')" title="换一张">↻</b>
+            <b onclick="event.stopPropagation();dropMedia('${o.id}','${m.id || m.file || ''}','${s.label}')" title="删除">✕</b>
+          </span>
+        </div>`
+      }).join('')}
+      ${extras.map(m => `<div class="pv-slot">
+        ${m.kind === 'video'
+          ? `<video src="${mediaSrc(o, m)}" muted playsinline preload="metadata"></video><span class="pv-play">▶</span>`
+          : `<img src="${mediaSrc(o, m)}" onclick="viewImage('${mediaSrc(o, m)}')">`}
+        <span class="pv-ops"><b onclick="event.stopPropagation();dropMedia('${o.id}','${m.id || m.file || ''}','凭证')" title="删除">✕</b></span>
+      </div>`).join('')}
+    </div>
+    <div class="tiny" style="margin-top:6px;">传上去之后客户在「我的订单」详情里就能看到</div>`
+}
+
+function pickMedia(id, slot){
+  const s = MEDIA_SLOTS.find(x => x.slot === slot)
+  if(!s) return
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = s.kind === 'video' ? 'video/*' : 'image/*'
+  input.style.display = 'none'
+  input.onchange = e => {
+    const f = e.target.files && e.target.files[0]
+    try { document.body.removeChild(input) } catch(err){}
+    if(f) uploadSlot(id, slot, f)
+  }
+  document.body.appendChild(input)
+  input.click()
+}
+
+// 图片先压再传。
+//
+// 手机随手一张就是 4~8MB，直接传会撞上限、还会拖到十几秒。
+// 压到长边 1800px / JPEG 0.86 —— 信封上的手绘细节、字迹、邮票全都看得清，
+// 而体积通常掉到 300~600KB，上传一两秒就完事。
+function shrinkImage(file, maxEdge, quality){
+  const LIMIT = maxEdge || 1800
+  const Q = quality || 0.86
+  return new Promise((resolve, reject) => {
+    // 浏览器读不了 HEIC 时 decode 会失败 —— 那就原样上传，让后端兜住
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')) }
+    img.onload = () => {
+      try {
+        let w = img.naturalWidth, h = img.naturalHeight
+        if(!w || !h){ URL.revokeObjectURL(url); reject(new Error('size')); return }
+        const scale = Math.min(1, LIMIT / Math.max(w, h))
+        const cw = Math.max(1, Math.round(w * scale))
+        const ch = Math.max(1, Math.round(h * scale))
+        const cv = document.createElement('canvas')
+        cv.width = cw; cv.height = ch
+        cv.getContext('2d').drawImage(img, 0, 0, cw, ch)
+        cv.toBlob(b => {
+          URL.revokeObjectURL(url)
+          if(b) resolve(b)
+          else reject(new Error('encode'))
+        }, 'image/jpeg', Q)
+      } catch(e){ URL.revokeObjectURL(url); reject(e) }
+    }
+    img.src = url
+  })
+}
+
+async function uploadSlot(id, slot, file){
+  const o = getOrder(id)
+  const s = MEDIA_SLOTS.find(x => x.slot === slot)
+  if(!o || !s) return
+  // 没开同步 = 传不上去 = 客户永远看不到。必须**当场拦住**，
+  // 不能让他以为存好了（那正是这次要修的那个 bug）。
+  if(!window.Cloud || !Cloud.on()){ toast('先开启云端同步，客户才看得到'); return }
+  if(!cloudKey){ toast('先填同步密钥，否则传不上去'); return }
+
+  let blob = file
+  if(s.kind === 'image'){
+    toast('正在压缩…')
+    try {
+      const small = await shrinkImage(file)
+      if(small && small.size < file.size) blob = small
+    } catch(e){ blob = file }   // 压不了就原样传，别因为压缩失败把上传也弄没了
+  }
+  if(blob.size > MEDIA_MAX_BYTES){
+    toast(s.kind === 'video'
+      ? '视频 ' + mb(blob.size) + '，超过 ' + mb(MEDIA_MAX_BYTES) + '。手机上用「中/低质量」或拍短一点再传'
+      : '图片 ' + mb(blob.size) + '，超过 ' + mb(MEDIA_MAX_BYTES))
+    return
+  }
+
+  toast('正在上传 ' + mb(blob.size) + '…')
+  const r = await Cloud.uploadMedia(cloudKey, o.order_no, s.kind, blob)
+  if(!r || !r.ok){
+    const why = !r ? '网络不通'
+      : r.aborted ? '超时了，网络太慢'
+      : r.error === 'media_too_large' ? '超过上限'
+      : r.error === 'bad_key' ? '同步密钥不对'
+      : r.status === 503 ? '服务端连不上 GitHub'
+      : (r.error || ('上传失败 ' + (r.status || '')))
+    toast('没传上去：' + why)
+    return
+  }
+
+  // 同一个位置只留一份：旧的从服务器上删掉，别在私有仓库里越积越多
+  const old = slotOf(o, s.slot)
+  const kept = (Array.isArray(o.media) ? o.media : []).filter(m => m && m.slot !== s.slot)
+  const rec = Object.assign({ slot: s.slot }, r.media)
+  updOrder(id, { media: kept.concat([rec]) })
+  if(old && old.file) Cloud.deleteMedia(cloudKey, o.order_no, old.file).catch(() => {})
+  log(id, '上传' + s.label + ' ' + mb(blob.size))
+  toast(s.label + '已上传 · 客户能看到')
+  renderList()
+}
+
+function dropMedia(id, mediaId, label){
+  const o = getOrder(id); if(!o) return
+  const list = Array.isArray(o.media) ? o.media : []
+  const m = list.find(x => x && ((x.id && x.id === mediaId) || (x.file && x.file === mediaId)))
+  if(!m) return
+  updOrder(id, { media: list.filter(x => x !== m) })
+  if(m.file && cloudKey) Cloud.deleteMedia(cloudKey, o.order_no, m.file).catch(() => {})
+  log(id, '删除' + (label || '凭证'))
+  toast('已删除')
+  renderList()
 }
 
 function toggle(id){
@@ -1728,34 +1916,60 @@ function saveAddr(id){
   closeSheet(); toast('地址已保存'); renderList()
 }
 
+// 额外的「制作过程图」——信封正反面/投递视频已经在卡片上有固定位置了，
+// 这里放多出来的过程照（勾线、上色、贴票…），客户会看到在一个相册里。
 function sheetMedia(id){
   openSheet(`
-    <div class="sh-title">存凭证</div>
-    <div class="sh-sub">成品图、投递视频。只存在这台设备里，客户在详情页能看到。</div>
-    <button class="sh-opt" onclick="attach('${id}','image/*')">📷 选择图片<small>可多选，成品图</small></button>
-    <button class="sh-opt" onclick="attach('${id}','video/*')">🎥 选择视频<small>建议 60MB 以内</small></button>
+    <div class="sh-title">加制作过程图</div>
+    <div class="sh-sub">信封正面 / 反面 / 投递视频 在卡片上各有固定位置，不用在这里传。<br>
+      这里放多出来的过程照，客户会在「制作过程」里看到。</div>
+    <button class="sh-opt" onclick="pickExtra('${id}','image/*')">📷 选择图片<small>可多选 · 会自动压缩后上传</small></button>
     <button class="sh-opt" onclick="closeSheet()" style="text-align:center;color:#77766f">取消</button>
   `)
 }
-function attach(id, accept){
+
+function pickExtra(id, accept){
   closeSheet()
   const input = document.createElement('input')
   input.type = 'file'; input.accept = accept; input.multiple = true; input.style.display = 'none'
-  input.onchange = e => {
-    const files = Array.from(e.target.files)
-    const o = getOrder(id); if(!o) return
-    const media = Array.isArray(o.media) ? o.media : []
-    let added = 0
-    files.forEach(f => {
-      if(f.type.indexOf('video') === 0 && f.size > 60 * 1024 * 1024){ toast('视频超过 60MB，已跳过'); return }
-      media.push({ kind: f.type.indexOf('video') === 0 ? 'video' : 'image', path: URL.createObjectURL(f), at: Date.now(), name: f.name })
-      added++
-    })
-    updOrder(id, { media })
-    if(added) log(id, `存入 ${added} 个凭证`)
-    toast(added ? `已存 ${added} 个凭证` : '没有存入')
+  input.onchange = async e => {
+    const files = Array.from(e.target.files || [])
+    try { document.body.removeChild(input) } catch(err){}
+    if(!files.length) return
+    const o = getOrder(id)
+    if(!o) return
+    if(!window.Cloud || !Cloud.on()){ toast('先开启云端同步，客户才看得到'); return }
+    if(!cloudKey){ toast('先填同步密钥，否则传不上去'); return }
+
+    let okCount = 0, skipped = 0
+    for(let i = 0; i < files.length; i++){
+      const f = files[i]
+      toast('正在上传 ' + (i + 1) + '/' + files.length + '…')
+      let blob = f
+      if(String(f.type).indexOf('video') === 0){
+        if(f.size > MEDIA_MAX_BYTES){ skipped++; continue }
+      }else{
+        try {
+          const small = await shrinkImage(f)
+          if(small && small.size < f.size) blob = small
+        } catch(err){ blob = f }
+      }
+      if(blob.size > MEDIA_MAX_BYTES){ skipped++; continue }
+      const kind = String(f.type).indexOf('video') === 0 ? 'video' : 'image'
+      const r = await Cloud.uploadMedia(cloudKey, o.order_no, kind, blob)
+      if(r && r.ok){
+        const cur = getOrder(id)
+        const list = Array.isArray(cur.media) ? cur.media : []
+        updOrder(id, { media: list.concat([r.media]) })
+        okCount++
+      }else{
+        skipped++
+      }
+    }
+    if(okCount) log(id, '存入 ' + okCount + ' 个凭证')
+    toast(okCount ? ('已上传 ' + okCount + ' 张' + (skipped ? '，' + skipped + ' 张跳过' : ''))
+                  : '没有传上去' + (skipped ? '（可能超过 ' + mb(MEDIA_MAX_BYTES) + '）' : ''))
     renderList()
-    document.body.removeChild(input)
   }
   document.body.appendChild(input); input.click()
 }

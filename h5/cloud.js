@@ -20,7 +20,7 @@
 //   自动写进公开仓库的 endpoint.json（见 letter-api/_addrpub.js），
 //   页面发现下面这个常量连不通时，会自己去读那份、并换过去。
 //   所以这一行只是「第一顺位」，不是唯一依靠 —— 忘了更新它也不会让客户下单失败。
-var CLOUD_BASE_DEFAULT = 'https://94ec890f3591456f954b1730d566cade.sg2.agentos-app.run'
+var CLOUD_BASE_DEFAULT = 'https://5351862426444c33b375fb43d7b0cd63.sg2.agentos-app.run'
 var CLOUD_BASE = CLOUD_BASE_DEFAULT
 
 // —— 逃生口：换后端地址时不用重新发版（调试、迁移都用得上）——

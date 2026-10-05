@@ -70,7 +70,7 @@ const STATUS_FLOW = [
   { key:'drawn',   label:'绘制完成',       hint:'信封已经画好了，正在核对细节、准备写信与贴票。' },
   { key:'packing', label:'准备寄出',       hint:'信已封好、邮票已贴，等下一次投递。' },
   { key:'mailed',  label:'已寄出',         hint:'已投递并录制投递视频，等待对方收取。' },
-  { key:'done',    label:'已完成',         hint:'寄出后 4–8 周无退回，视为送达。' },
+  { key:'done',    label:'已完成',         hint:'已顺利送达。国际平邮通常在寄出后 4–8 周到达，这一单已超过该周期且未被退回，视为送达完成 ✦' },
 ]
 const STATUS_MAP = {}
 STATUS_FLOW.forEach((s,i)=>STATUS_MAP[s.key]=i)
@@ -769,7 +769,12 @@ const REPUSH_MAX    = 2                // 一轮刷新里最多补发 2 单（�
 // 刻意**不含** admin_note：服务端不会把它给客户端（那是后台内部备注），
 // 放进来只会在每次刷新时把本机那份抹掉。
 const SYNC_FIELDS = ['status','pay_status','recipient_addr','addr_lookup','media',
-                     'updated_at','artist','country','return_addr','letter_source','letter_note']
+                     'updated_at','artist','country','return_addr','letter_source','letter_note',
+                     // mailed_at：「已寄出」那一刻的时间戳，也是 8 周后自动转「已完成」的计时起点。
+                     // 客户页现在不显示它，但必须**跟着走** ——
+                     // 因为它只在服务端被钉一次，一旦客户端拉取时丢掉、又恰好把本地那份推回去，
+                     // 起点就没了，那一单会永远停在「已寄出」。留在这里是防这个的。
+                     'mailed_at']
 
 let refreshRunning = null      // 正在跑的那一次（见下）
 

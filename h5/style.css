@@ -528,6 +528,22 @@ body {
   border:1px dashed rgba(255,255,255,.12);
 }
 
+/* 本机记录的清理入口。
+   刻意做得**不显眼**（小字、无边框、灰色）——它是个兜底通道，不是主操作。
+   客户下单、查进度才是主线；这条只在「我想把列表清干净」时才需要被找到。 */
+.track-tools { margin:14px 0 4px; }
+.track-clear {
+  display:block; width:100%; cursor:pointer; font-family:inherit;
+  padding:10px 12px; border-radius:11px; font-size:13px;
+  color:#9aa1aa; background:transparent;
+  border:1px dashed rgba(255,255,255,0.13);
+}
+.track-clear:active { background:rgba(255,255,255,0.05); }
+.track-clear-note {
+  font-size:11.5px; color:#6f7781; line-height:1.6;
+  margin-top:8px; padding:0 2px;
+}
+
 /* 换设备查订单：常驻卡片 */
 .lookup-card { padding:16px 16px 14px; }
 .lookup-sub {

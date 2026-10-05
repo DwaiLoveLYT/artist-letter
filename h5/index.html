@@ -375,6 +375,9 @@
     </div>
     <!-- 进度同步状态：进页面会自动去服务端拉一次最新进度，这里如实说明结果 -->
     <div id="track-sync" class="track-sync" style="display:none;"></div>
+    <!-- 本机记录的清理入口（有单时才出现）。订单存在这台浏览器里，
+         换设备/清缓存都看不到 —— 那客户也得有办法自己清掉。见 renderTrack 里的说明。 -->
+    <div id="track-tools"></div>
     <div id="track-list"></div>
     <div class="empty-state" id="track-empty">
       <div class="empty-icon">📭</div>

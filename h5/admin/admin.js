@@ -680,7 +680,15 @@ function fmtDay(ts){
   const d = new Date(ts), p = n => String(n).padStart(2,'0')
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
 }
-function esc(s){ return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+// 转义 5 个字符（含单引号）。
+// 单引号这一条**目前不是漏洞** —— 所有属性插值用的都是前端生成的 o.id 或常量。
+// 但它是这类函数最容易漏的一个：一旦将来有人写 onclick="f('${esc(x)}')"，
+// 少转义一个单引号就是注入。补上它成本是零，消除的是「未来的一个坑」。
+function esc(s){
+  return s == null ? '' : String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+}
 function tail(no){ return (no || '').slice(-4).toUpperCase() }
 
 // 「待查地址」= 客户把地址交给我查，而这一单还没查到。

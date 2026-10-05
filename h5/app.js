@@ -621,10 +621,28 @@ function renderTrack(){
     listEl.innerHTML=''
     emptyEl.style.display='block'
     if(localHead) localHead.style.display='none'      // 没本机单就别挂这个标题
+    const te=document.getElementById('track-tools'); if(te) te.innerHTML=''
     return
   }
   emptyEl.style.display='none'
   if(localHead) localHead.style.display='block'
+  // 本机记录的清理入口。
+  //
+  // 为什么需要它：订单只存在**下单那台浏览器**里（换设备、清缓存都看不到），
+  // 这是有意的 —— 但它意味着客户没有任何办法把列表清干净：
+  // 借出去的手机、当初试手下的单、不想再留的记录，全都只能一直挂在那里。
+  // 一个只能增不能减的列表，本身就是个坑。
+  //
+  // 清掉是**安全**的：只动这台浏览器的 localStorage，服务端那一份分毫不受影响，
+  // 而且清完立刻就能用「订单号 + 手机号后 4 位」查回来（上面那张卡片就是）。
+  // 所以这里不需要任何「要不要保留」的纠结 —— 它天然可逆。
+  const toolsEl=document.getElementById('track-tools')
+  if(toolsEl){
+    toolsEl.innerHTML =
+      `<button class="track-clear" onclick="clearLocalOrders()">清理这台设备的订单记录（${orders.length} 单）</button>`
+      + `<div class="track-clear-note">只清这台浏览器，服务端不受影响。`
+      + `清掉后用上面的「订单号 + 手机号后 4 位」随时可以查回来。</div>`
+  }
   listEl.innerHTML=orders.map(o=>{
     const pending = o.addr_lookup && !String(o.recipient_addr||'').trim()
     // 服务端从没确认过这一单 —— 它可能根本没送到我这边。
@@ -643,6 +661,33 @@ function renderTrack(){
       ${voided?`<div class="track-voided">这一单已作废（客服已取消），不用再管它</div>`:''}
     </div>`
   }).join('')
+}
+
+// 清掉这台设备上的订单记录。
+//
+// 三个必须做对的地方：
+//  ① **连补推队列一起清**。队列（Cloud.pending）里存的是「还没送到服务端」的单，
+//     如果只清列表不清队列，下次打开页面队列会把这单推上去 ——
+//     结果变成「服务端有、本机没有」，客户在列表里找不到自己刚下的单。
+//  ② 先确认再清。虽然可逆，但「点一下列表全没了」这件事本身会吓人。
+//  ③ 清完立刻重渲染，不能让页面停在旧内容上（否则看起来像没生效）。
+function clearLocalOrders(){
+  const list = allOrders()
+  if(!list.length) return
+  const n = list.length
+  const ok = window.confirm(
+    '清掉这台设备上的 ' + n + ' 条订单记录？\n\n'
+    + '· 只清这台浏览器，服务端那一份不受影响\n'
+    + '· 清掉后可以用「订单号 + 手机号后 4 位」随时查回来'
+  )
+  if(!ok) return
+  // ① 队列先清（要按单号清，所以必须在列表被清空之前做）
+  if(window.Cloud && Cloud.dropQueued){
+    list.forEach(o => { if(o && o.order_no) Cloud.dropQueued(o.order_no) })
+  }
+  saveOrders([])
+  // ③ 立刻重渲染
+  renderTrack()
 }
 
 // 换设备查订单：输订单号 + 手机号后 4 位

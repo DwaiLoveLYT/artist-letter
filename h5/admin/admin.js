@@ -25,8 +25,31 @@ const STATUS_FLOW = [
 const STATUS_MAP = {}
 STATUS_FLOW.forEach(s => STATUS_MAP[s.key] = s)
 
+// 「已寄出」满多少天自动变「已完成」。与后端 server.js 的 DONE_AFTER_MS 是同一个数，
+// 改这里必须同步改那里 —— 不然后台显示的倒计时和服务端实际动作会对不上。
+const MAILED_AUTO_DONE_DAYS = 56
+
 function statusLabel(k){ return STATUS_MAP[k] ? STATUS_MAP[k].label : '处理中' }
 function statusIdx(k){ return STATUS_FLOW.findIndex(s => s.key === k) }
+
+// 「已寄出」订单的倒计时标签。
+//
+// 解决的是「老板看到订单自己变了会以为出 bug」这件事：
+// 与其让状态在 8 周后的某个整点无声无息地跳一下，不如**从头就告诉他**——
+// 「还差 X 天自动完成」。这样那个变化就是预期内的，而不是意外。
+//
+// 只对 mailed 显示；其余状态返回空串（模板里会自然留空，不留一个空格）。
+function mailedCountdown(o){
+  if(!o || o.status !== 'mailed') return ''
+  const at = Number(o.mailed_at) || 0
+  // 没有寄出时刻（老单，或还没同步下来）→ 不显示倒计时，给一句中性说明。
+  // 不显示「还剩 0 天」这种会让人误解成「今天就要关」的东西。
+  if(!at) return '<span class="tag sage" title="寄出时间未记录，不会自动完成；可在云端同步后自动补齐">等待寄出时间</span>'
+  const days = Math.floor((Date.now() - at) / 86400000)
+  const left = MAILED_AUTO_DONE_DAYS - days
+  if(left <= 0) return '<span class="tag sage" title="已满 ' + MAILED_AUTO_DONE_DAYS + ' 天，系统会在下次巡检时标为已完成">即将自动完成</span>'
+  return '<span class="tag sage" title="寄出于 ' + fmt(at) + '，满 ' + MAILED_AUTO_DONE_DAYS + ' 天无退回即视为送达">寄出 ' + days + ' 天 · 还差 ' + left + ' 天完成</span>'
+}
 
 // ==================== 存储 ====================
 function allOrders(){
@@ -1706,6 +1729,7 @@ function orderCard(o){
       <div class="o-tags">
         <span class="tag ${paid ? 'green' : 'amber'}">${paid ? '已收款' : '待收款'}</span>
         <span class="tag sage">${statusLabel(o.status)}</span>
+        ${mailedCountdown(o)}
         ${localOnly ? '<span class="tag local" title="本次没有在云端核对到这一单，它目前只存在于这台设备">本机</span>' : ''}
         ${lookup ? '<span class="tag amber">地址待查</span>'
                  : (o.addr_lookup ? '<span class="tag sage">代查地址</span>' : '')}
@@ -1724,6 +1748,11 @@ function orderCard(o){
       }</div></div>
       <div class="d-row"><div class="d-key">回信地址</div><div class="d-val">${esc(o.return_addr || '-')}</div></div>
       <div class="d-row"><div class="d-key">信件来源</div><div class="d-val">${o.letter_source === 'proxy' ? '需要代写（费用另议）' : '客户自己手写'}</div></div>
+      ${Number(o.mailed_at) ? `<div class="d-row"><div class="d-key">寄出时间</div><div class="d-val">${fmt(o.mailed_at)}${
+        o.status === 'mailed'
+          ? '<br><b style="color:#8a8a82;font-weight:400">满 ' + MAILED_AUTO_DONE_DAYS + ' 天无退回，系统自动标为已完成</b>'
+          : ''
+      }</div></div>` : ''}
       ${o.letter_note ? `<div class="d-note"><b style="color:#8a8a82">客户备注：</b><br>${esc(o.letter_note)}</div>` : ''}
       ${o.admin_note ? `<div class="d-note"><b style="color:#8a8a82">我的留言：</b><br>${esc(o.admin_note)}</div>` : ''}
 
@@ -2114,10 +2143,42 @@ function sheetStatus(id){
 }
 function setStatus(id, key){
   const o = getOrder(id)
-  updOrder(id, { status: key })
+  updOrder(id, statusPatch(o, key))
   if(key !== 'created' && o && o.pay_status !== 'paid') updOrder(id, { pay_status:'paid' })
   log(id, '状态 → ' + statusLabel(key))
-  closeSheet(); toast('已改为「' + statusLabel(key) + '」'); renderList()
+  closeSheet()
+  // 刚标成「已寄出」时，明确告诉老板「8 周后会自动完成」——
+  // 否则他改完就走了，过两个月看到订单自己变了会以为是 bug。
+  if(key === 'mailed' && o && o.status !== 'mailed'){
+    toast('已寄出 · ' + MAILED_AUTO_DONE_DAYS + ' 天后自动标记为已完成')
+  } else {
+    toast('已改为「' + statusLabel(key) + '」')
+  }
+  renderList()
+}
+
+// 与后端 server.js 的 normalizeMailedAt **完全同规则**，说明也写在那里。
+//
+// 为什么前端也要做一次：后台本地的这一份要立刻能显示「还剩几天」，
+// 不能等下一次云端拉取才把 mailed_at 补上 —— 那中间的一小时里，
+// 后台会显示「已寄出」却算不出倒计时，看起来就像功能没生效。
+//
+// 规则：
+//   改成 mailed            → 记下此刻（这就是「交给邮局」的时刻，8 周倒计时的起点）
+//   本来已是 mailed        → 保留原时刻（重复点不会重置倒计时）
+//   改成 done              → **保留**（寄出是真实发生过的事，历史留着，后台要显示寄出日期）
+//   退回 mailed 之前的阶段 → 清掉（填错了改回来，不能留一个错误的时间戳）
+// 后两类靠 PRE_MAIL 区分 —— 与后端 normalizeMailedAt 逐字对应。
+const PRE_MAIL = ['created','paid','drawing','drawn','packing']
+function statusPatch(o, key){
+  const had = Number(o && o.mailed_at) || 0
+  if(key === 'mailed'){
+    return had ? { status:'mailed' } : { status:'mailed', mailed_at: Date.now() }
+  }
+  if(had && PRE_MAIL.indexOf(key) >= 0){
+    return { status:key, mailed_at: null }
+  }
+  return { status:key }
 }
 
 function sheetNote(id){

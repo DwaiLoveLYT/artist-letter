@@ -941,10 +941,23 @@ async function doRefreshOrders(o){
     // 404 / 400 = 这一单服务端查不到。
     //   手机尾号对不上 → 补发也救不回来（服务端按单号幂等，不会建出第二张）
     //   真的没上去   → 补发就是唯一的救命手段，绝不能默默跳过
+    //
+    // ⚠ 补发**不只**为「孤儿单」——**已确认过**的单同样要补发一次。原因：
+    //   后台把一单删掉之后，客户这台设备上什么都没变：列表里那一单还挂着，
+    //   状态还停在删除前的样子，客户一直以为在正常推进。这是**在骗客户**。
+    //   而服务端其实**已经能权威地回答**这件事：把这一单推一次，
+    //   墓碑里的号会回 tombstoned:true —— 那就是「我删过它」的正式答复。
+    //   所以这里不能再用 neverConfirmed 把已确认的单挡在门外。
+    //
+    // 三种结果都有确定含义，不需要任何猜测：
+    //   · tombstoned  → 服务端删过这一单 → 本机标作废（不再轮询，文案已备好）
+    //   · created     → 服务端原本没有（真的丢了）→ 补上了，自我修复
+    //   · 都没有      → 服务端本来就有（这一次只是查不到）→ 什么都不动
+    //   补发受 cooled（10 分钟）+ REPUSH_MAX（每轮最多 2 单）双重限流，
+    //   所以「手机尾号对不上」那种一直 404 的单最多 10 分钟打扰服务端一次。
     if(r.status === 404 || r.status === 400){
-      const neverConfirmed = !ord.cloud_at
       const cooled = now - (Number(ord.repush_at) || 0) > REPUSH_GAP_MS
-      if(r.status === 404 && neverConfirmed && cooled && repushed < REPUSH_MAX){
+      if(r.status === 404 && cooled && repushed < REPUSH_MAX){
         repushed++
         let pr = null
         try { pr = await Cloud.pushOrder(ord, { tries: 2 }) } catch(e){ pr = null }
@@ -953,7 +966,8 @@ async function doRefreshOrders(o){
             // 服务端说「这单我删过」→ 本机也标作废，之后不再轮询它
             updOrder(ord.id, { voided: true, voided_at: Date.now(), sync_at: Date.now() })
           }else{
-            // 补发成功：这一单从「孤儿」变回正常单，后台立刻就能看到
+            // 服务端确实有这一单（或者刚才把它补上了）→ 标成「已送达服务端」。
+            // 对孤儿单这是救命；对已确认的单只是刷新一下时间戳，无副作用。
             updOrder(ord.id, { cloud_at: Date.now(), sync_at: Date.now() })
             checked++
           }

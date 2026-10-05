@@ -240,6 +240,10 @@ var Cloud = {
   healedFrom: function(){ return _healedFrom },
   pending: qSize,
   hasPending: qHas,
+  // 按单号把一条从待推队列里摘掉。
+  // 客户页「清理这台设备的订单记录」要用它 —— 只清列表不清队列的话，
+  // 下次打开页面队列会把那单重新推上去，变成「服务端有、本机没有」。
+  dropQueued: qDrop,
 
   // —— 客户页：把订单送到服务端 ——
   // 失败**绝不能**影响下单流程：页面上的「发给客服（一键分享）」仍是兜底通道。

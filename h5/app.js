@@ -1275,3 +1275,15 @@ window.addEventListener('DOMContentLoaded',()=>{
 })
 window.addEventListener('resize', syncTrustBarHeight)
 window.addEventListener('orientationchange', syncTrustBarHeight)
+
+// ---- 键盘可达：role="button" 的非按钮元素，Enter / 空格等同点击 ----
+// 页面上有若干「文字链接式按钮」（如顶部「我的订单 ›」），原生 <a>/<div> 不响应键盘，
+// 用键盘或读屏的人按了没反应。统一在这里兜底，不用逐个改标签（改标签会牵动样式）。
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter' && e.key !== ' ') return
+  var t = e.target
+  if(!t || !t.matches || !t.matches('[role="button"]')) return
+  if(t.matches('button, input, textarea, select, a[href]')) return
+  e.preventDefault()
+  t.click()
+})

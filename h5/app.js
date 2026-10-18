@@ -48,7 +48,6 @@ function initContacts(){
 }
 function copyContactWx(){ copyText(wxId()) }
 
-const RECEIVE_ADDR = '中国广东省深圳市南山区泉园路61号绿茵丰和，直接放东门保安室。188888888'
 const PAY_QR = 'images/pay-qr.jpg'
 
 // 收款二维码开关。

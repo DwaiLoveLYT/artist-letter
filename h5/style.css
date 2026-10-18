@@ -22,7 +22,7 @@ body {
   background:rgba(20,20,19,0.94);
   -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
   padding:10px 14px; display:flex; align-items:center; justify-content:space-between;
-  gap:10px; font-size:12px; color:#6a6a62;
+  gap:10px; font-size:12px; color:#84847c;
   border-bottom:1px solid rgba(255,255,255,0.055);
   letter-spacing:0.3px;
 }
@@ -45,7 +45,7 @@ body {
 
 /* 订单号保存提示 */
 .save-tip {
-  text-align:center; font-size:12px; color:#7d7d75;
+  text-align:center; font-size:12px; color:#84847c;
   background:rgba(255,255,255,0.035);
   border-radius:10px; padding:10px 13px; margin:0 0 16px;
   line-height:1.6;
@@ -200,7 +200,7 @@ body {
   margin-bottom:14px; padding:0 2px;
 }
 .section-title { font-size:20px; font-weight:600; color:#f5f5f0; }
-.section-more { font-size:13px; color:#6a6a62; }
+.section-more { font-size:13px; color:#84847c; }
 
 /* ==================== 信任网格 ==================== */
 .trust-grid {
@@ -213,7 +213,7 @@ body {
 }
 .trust-icon { font-size:24px; margin-bottom:6px; }
 .trust-label { font-size:14px; font-weight:500; color:#f5f5f0; margin-bottom:2px; }
-.trust-desc { font-size:12px; color:#6a6a62; }
+.trust-desc { font-size:12px; color:#84847c; }
 
 /* ==================== 价格卡片 ==================== */
 .price-card {
@@ -280,7 +280,7 @@ body {
   cursor:pointer; -webkit-tap-highlight-color:transparent;
 }
 .faq-arrow {
-  flex-shrink:0; font-size:19px; line-height:1; color:#5a5a54;
+  flex-shrink:0; font-size:19px; line-height:1; color:#8a8a82;
   transform:rotate(0deg);
   transition:transform .22s ease, color .18s ease;
 }
@@ -302,7 +302,7 @@ body {
 }
 .bottom-cta-title { font-size:20px; font-weight:600; color:#f5f5f0; margin-bottom:6px; }
 .bottom-cta-desc { font-size:14px; color:#8a8a82; margin-bottom:20px; }
-.bottom-cta-contact { margin-top:16px; font-size:13px; color:#6a6a62; }
+.bottom-cta-contact { margin-top:16px; font-size:13px; color:#84847c; }
 .bottom-cta-contact b { color:#5DCAA5; }
 
 /* ==================== 卡片 ==================== */
@@ -318,7 +318,7 @@ body {
   gap:8px; margin-bottom:20px; padding:0 20px;
 }
 .form-progress-step {
-  font-size:13px; color:#6a6a62; padding:4px 0;
+  font-size:13px; color:#84847c; padding:4px 0;
   border-bottom:2px solid transparent;
 }
 .form-progress-step.active { color:#5DCAA5; border-bottom-color:#5DCAA5; }
@@ -337,7 +337,7 @@ body {
   transition:width .35s cubic-bezier(.4,0,.2,1);
 }
 .form-fill-hint {
-  text-align:center; font-size:12px; line-height:1.5; color:#6a6a62;
+  text-align:center; font-size:12px; line-height:1.5; color:#84847c;
   margin:0 20px 18px; min-height:18px;
   transition:color .25s;
 }
@@ -352,10 +352,10 @@ body {
 .field { margin-bottom:18px; }
 .label { font-size:14px; color:#a5a49f; margin-bottom:6px; display:block; }
 .label .req { color:#C4633A; margin-left:2px; }
-.field-hint { font-size:12px; color:#6a6a62; margin-top:4px; }
+.field-hint { font-size:12px; color:#84847c; margin-top:4px; }
 .input, .textarea {
   background:#141413; border:1px solid rgba(255,255,255,0.1);
-  border-radius:10px; padding:12px 14px; font-size:15px; color:#f5f5f0;
+  border-radius:10px; padding:12px 14px; font-size:16px; color:#f5f5f0;
   width:100%; outline:none; -webkit-appearance:none;
   transition:border-color 0.2s;
   /* 校验失败会把这个字段滚到顶部；留出两条吸顶栏的高度，别被压住 */
@@ -371,7 +371,7 @@ body {
 }
 .radio.on { border-color:#2C4A3B; background:rgba(44,74,59,0.12); }
 .radio-title { font-size:14px; font-weight:600; color:#f5f5f0; margin-bottom:2px; }
-.radio-desc { font-size:12px; color:#6a6a62; }
+.radio-desc { font-size:12px; color:#84847c; }
 .form-submit {
   margin-top:8px; padding:20px; background:#1a1a19;
   border-radius:14px; border:1px solid rgba(255,255,255,0.06);
@@ -379,7 +379,7 @@ body {
 }
 .form-submit-price { font-size:14px; color:#a5a49f; margin-bottom:4px; }
 .form-submit-price span { font-size:24px; font-weight:700; color:#f5f5f0; }
-.form-submit-note { font-size:12px; color:#6a6a62; margin-bottom:16px; }
+.form-submit-note { font-size:12px; color:#84847c; margin-bottom:16px; }
 /* 校验失败：把出错的那一栏直接标出来，别只弹一句提示让人自己找 */
 .field-error {
   border-color:#C4633A !important;
@@ -407,7 +407,7 @@ body {
   border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:14px;
 }
 .letter-help-title { font-size:13.5px; font-weight:600; color:#f5f5f0; margin-bottom:5px; }
-.letter-help-desc  { font-size:12px; color:#6a6a62; line-height:1.55; margin-bottom:10px; }
+.letter-help-desc  { font-size:12px; color:#84847c; line-height:1.55; margin-bottom:10px; }
 .letter-help-list  { display:flex; flex-direction:column; gap:7px; }
 .letter-idea {
   font-size:13px; color:#a5a49f; line-height:1.5;
@@ -416,7 +416,7 @@ body {
   border-radius:0 8px 8px 0; padding:8px 11px;
 }
 .letter-help-foot {
-  font-size:11.5px; color:#5a5a54; line-height:1.6;
+  font-size:11.5px; color:#8a8a82; line-height:1.6;
   margin-top:11px; padding-top:10px;
   border-top:1px solid rgba(255,255,255,0.05);
 }
@@ -449,7 +449,7 @@ body {
   object-fit:cover; display:block; margin:0 auto;
   border:1px solid rgba(255,255,255,0.1);
 }
-.qr-tip { font-size:12px; color:#6a6a62; margin-top:10px; line-height:1.5; }
+.qr-tip { font-size:12px; color:#84847c; margin-top:10px; line-height:1.5; }
 /* 收款码加载失败时的兜底提示 —— 没有它客户就卡在付款这一步了 */
 .qr-fail {
   font-size:13px; color:#EF9F27; line-height:1.65;
@@ -503,9 +503,9 @@ body {
   width:100%; aspect-ratio:3/4; border-radius:11px;
   border:1px dashed rgba(255,255,255,.14); background:rgba(255,255,255,.02);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  font-size:12px; color:#77766f; text-align:center; line-height:1.6;
+  font-size:12px; color:#84847c; text-align:center; line-height:1.6;
 }
-.env-slot.empty .env-ph span { font-size:11px; color:#5f5e58; }
+.env-slot.empty .env-ph span { font-size:11px; color:#8a8a82; }
 
 .track-pending {
   font-size:12.5px; color:#EF9F27; line-height:1.55;
@@ -540,7 +540,7 @@ body {
 }
 .track-clear:active { background:rgba(255,255,255,0.05); }
 .track-clear-note {
-  font-size:11.5px; color:#6f7781; line-height:1.6;
+  font-size:11.5px; color:#84847c; line-height:1.6;
   margin-top:8px; padding:0 2px;
 }
 
@@ -557,13 +557,13 @@ body {
 }
 .lookup-input {
   flex:1 1 calc(50% - 5px); min-width:140px;
-  padding:11px 13px; font-size:14px;
+  padding:11px 13px; font-size:16px;
   background:#0d0f12; border:1px solid rgba(255,255,255,0.08);
   border-radius:10px; color:#f5f5f0;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   letter-spacing:.5px;
 }
-.lookup-input::placeholder { color:#5a5a54; letter-spacing:0; font-family:inherit; }
+.lookup-input::placeholder { color:#8a8a82; letter-spacing:0; font-family:inherit; }
 .lookup-input:focus { outline:none; border-color:rgba(93,202,165,0.4); }
 .lookup-btn {
   flex:1 1 100%; margin-top:6px;
@@ -609,7 +609,7 @@ body {
   font-size:12px; font-weight:700; flex-shrink:0;
 }
 .next-foot {
-  font-size:12px; color:#6a6a62; line-height:1.65;
+  font-size:12px; color:#84847c; line-height:1.65;
   margin-top:12px; padding-top:12px;
   border-top:1px solid rgba(255,255,255,0.05);
 }
@@ -649,7 +649,7 @@ body {
 .pay-tail-btn { margin-bottom:0; }
 
 .pay-why {
-  font-size:12.5px; color:#7d7d75; line-height:1.65;
+  font-size:12.5px; color:#84847c; line-height:1.65;
   margin-top:11px; text-align:center;
 }
 
@@ -697,7 +697,7 @@ body {
   border-radius:10px; padding:10px 12px; margin-bottom:10px;
 }
 .pay-wx-label {
-  font-size:11.5px; color:#7d7d75;
+  font-size:11.5px; color:#84847c;
 }
 .pay-wx-id {
   flex:1; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -715,7 +715,7 @@ body {
 
 .pay-or {
   display:flex; align-items:center; gap:10px;
-  margin:16px 0 12px; font-size:11.5px; color:#5a5a54; letter-spacing:.4px;
+  margin:16px 0 12px; font-size:11.5px; color:#8a8a82; letter-spacing:.4px;
 }
 .pay-or::before, .pay-or::after {
   content:''; flex:1; height:1px; background:rgba(255,255,255,0.07);
@@ -739,7 +739,7 @@ body {
 .contact-left { min-width:0; flex:1; }
 .contact-when {
   display:flex; align-items:center; gap:7px; flex-wrap:wrap;
-  font-size:12px; color:#6a6a62; margin-bottom:4px;
+  font-size:12px; color:#84847c; margin-bottom:4px;
 }
 .contact-row.today .contact-when { color:#8a9a8f; }
 .contact-today {
@@ -762,7 +762,7 @@ body {
 }
 .contact-copy:active { opacity:.8; }
 .contact-note {
-  font-size:12px; color:#6a6a62; line-height:1.65;
+  font-size:12px; color:#84847c; line-height:1.65;
   margin-top:13px; padding-top:13px;
   border-top:1px solid rgba(255,255,255,0.05);
 }
@@ -786,7 +786,7 @@ body {
 .switch-body { flex:1; min-width:0; }
 .switch-title { font-size:14px; font-weight:600; color:#f5f5f0; margin-bottom:2px; }
 .lookup-toggle.on .switch-title { color:#5DCAA5; }
-.switch-desc { font-size:12px; color:#6a6a62; line-height:1.55; }
+.switch-desc { font-size:12px; color:#84847c; line-height:1.55; }
 
 /* ==================== 送礼：指南入口卡 ==================== */
 .gift-card {
@@ -844,7 +844,7 @@ body {
 .gift-pop-title { font-size:20px; font-weight:600; color:#f5f5f0; margin-bottom:10px; letter-spacing:-.3px; }
 .gift-pop-desc  { font-size:13.5px; color:#9aa89f; line-height:1.75; margin-bottom:20px; }
 .gift-pop .btn, .gift-pop .btn-ghost { margin-bottom:9px; }
-.gift-pop-foot  { font-size:11.5px; color:#5a5a54; margin-top:6px; line-height:1.5; }
+.gift-pop-foot  { font-size:11.5px; color:#8a8a82; margin-top:6px; line-height:1.5; }
 
 /* ==================== 写信指南 ==================== */
 /* 封面 = 标题页，刻意**不加卡片底**。
@@ -872,7 +872,7 @@ body {
   max-width:270px; margin:0 auto 16px;
   padding-top:16px; border-top:1px solid rgba(255,255,255,0.07);
 }
-.guide-cover-meta { font-size:11.5px; color:#5a5a54; letter-spacing:.5px; }
+.guide-cover-meta { font-size:11.5px; color:#8a8a82; letter-spacing:.5px; }
 
 /* ==================== 写在前面（随单附赠的重点） ====================
    和 01–10 的实操节刻意区分：没有编号、行距更松、有独立的卡片底。
@@ -1018,7 +1018,7 @@ body {
 .empty-state { text-align:center; padding:48px 20px; }
 .empty-icon { font-size:40px; margin-bottom:12px; }
 .empty-title { font-size:17px; font-weight:600; color:#f5f5f0; margin-bottom:6px; }
-.empty-desc { font-size:14px; color:#6a6a62; margin-bottom:20px; }
+.empty-desc { font-size:14px; color:#84847c; margin-bottom:20px; }
 
 /* ==================== 对账 ==================== */
 .reconcile-box {
@@ -1051,26 +1051,26 @@ body {
 /* ==================== 管理端 ==================== */
 .admin-header { margin-bottom:16px; }
 .admin-title { font-size:20px; font-weight:600; color:#f5f5f0; }
-.admin-sub { font-size:13px; color:#6a6a62; margin-top:2px; }
+.admin-sub { font-size:13px; color:#84847c; margin-top:2px; }
 .stats-row { display:flex; gap:10px; margin-bottom:16px; }
 .stat-box {
   flex:1; background:#1a1a19; border:1px solid rgba(255,255,255,0.06);
   border-radius:12px; padding:14px; text-align:center;
 }
 .stat-num { font-size:24px; font-weight:700; color:#f5f5f0; }
-.stat-label { font-size:12px; color:#6a6a62; margin-top:2px; }
+.stat-label { font-size:12px; color:#84847c; margin-top:2px; }
 .admin-actions { display:flex; gap:10px; margin-bottom:16px; }
 .admin-actions .btn, .admin-actions .btn-ghost { margin-bottom:0; }
 
 /* ==================== 通用 ==================== */
 .row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:14px; }
 .row:last-child { border-bottom:0; }
-.row-key { color:#6a6a62; flex-shrink:0; }
+.row-key { color:#84847c; flex-shrink:0; }
 .row-val { color:#f5f5f0; text-align:right; margin-left:16px; }
 .tag { display:inline-block; padding:3px 10px; border-radius:6px; font-size:11px; background:#262625; color:#a5a49f; }
 .tag.wait { background:#3a3320; color:#EF9F27; }
 .tag.done { background:#22352b; color:#5DCAA5; }
-.tiny { font-size:12px; color:#6a6a62; }
+.tiny { font-size:12px; color:#84847c; }
 .notice {
   background:#1a1a19; border-left:3px solid #5DCAA5; border-radius:8px;
   padding:12px 14px; font-size:13px; color:#a5a49f; margin-bottom:12px; line-height:1.5;
@@ -1093,3 +1093,32 @@ body {
   border-radius:10px; font-size:14px; z-index:100; border:1px solid rgba(255,255,255,0.1);
   display:none; pointer-events:none; backdrop-filter:blur(10px);
 }
+
+/* ==================== 体验打磨（可访问性 / 响应式） ==================== */
+/* 键盘与读屏用户要看得见焦点在哪；只在键盘操作时出现，鼠标/触摸点击不会冒出轮廓 */
+:focus-visible { outline:2px solid #5DCAA5; outline-offset:2px; border-radius:6px; }
+.input:focus-visible, .textarea:focus-visible, .lookup-input:focus-visible { outline-offset:0; }
+/* 触控目标不小于 44px（Apple/WCAG 建议），文字链接式按钮此前只有约 28px 高 */
+.trust-link { min-height:34px; display:inline-flex; align-items:center; }
+.btn-ghost, .btn { min-height:44px; }
+/* 移动端地址栏伸缩时 100vh 会多出一截；dvh 跟随可视高度，不支持的浏览器沿用上面的 100vh */
+#app { min-height:100dvh; padding-bottom:max(20px, env(safe-area-inset-bottom)); }
+.trust-bar { padding-top:max(10px, env(safe-area-inset-top)); }
+/* 动效敏感 / 开了「减少动态效果」的用户：页面切换和按压反馈也一并收掉 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+/* 平板 / 桌面：手机宽度的版心居中，两侧留出层次，不再是一条细长白底 */
+@media (min-width: 560px) {
+  body { background:radial-gradient(1200px 600px at 50% -10%, #1b2a22 0%, #0d0d0c 60%); }
+  #app { box-shadow:0 0 0 1px rgba(255,255,255,.05), 0 24px 80px rgba(0,0,0,.55); border-radius:0 0 18px 18px; }
+}
+/* 小屏手机（≤360px）收一点内边距和标题，避免横向挤压 */
+@media (max-width: 360px) {
+  .hero-title { font-size:clamp(26px, 8.4vw, 30px); }
+  .btn-large { font-size:16px; }
+}
+/* 高分辨率下文字更锐利一点 */
+html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+/* 标题/副标题断行均衡，避免末尾单独掉一个字 */
+.hero-title, .hero-sub, .card-title { text-wrap:balance; }

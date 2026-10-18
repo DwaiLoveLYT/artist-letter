@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#141413">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="robots" content="noindex, nofollow">
@@ -87,7 +90,7 @@
 <!-- ==================== 底部弹层 ==================== -->
 <div class="mask" id="mask" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet"><div class="sheet-inner" id="sheet-inner"></div></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script src="../cloud.js"></script>
 <script src="admin.js"></script>

@@ -117,6 +117,34 @@ const CLOUD_POLL_MS = 25000
 
 function cloudLoad(){
   try { cloudKey = localStorage.getItem(CLOUD_KEY_STORE) || '' } catch(e){ cloudKey = '' }
+  sessionRefreshIfOld()
+}
+
+// ---- 登录会话（令牌，s1. 开头）----
+// 浏览器里存的是服务端签发的令牌，不是主密钥：它会过期、能被服务端注销。
+// 旧设备里存的若还是主密钥，下次保存/续期时会自动换成令牌；服务端太旧则继续用旧方式。
+function isSessionTok(k){ return /^s1\.[\w-]+\.[\w-]+$/.test(k || '') }
+function sessionAgeMs(tok){
+  try {
+    const p = JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return Date.now() - Number(p.iat || 0)
+  } catch(e){ return 0 }
+}
+// 令牌用了一周以上就静默续期（有效期往后顺延；服务端会按首次登录起 90 天封顶）。
+async function sessionRefreshIfOld(){
+  if(!window.Cloud || !Cloud.on() || !cloudKey || !isSessionTok(cloudKey)) return
+  if(sessionAgeMs(cloudKey) < 7 * 86400000) return
+  const r = await Cloud.session(cloudKey)
+  if(r && r.ok && r.token) cloudSaveKey(r.token)
+}
+// 用主密钥换令牌。返回 { ok, tok? , legacy? , err? }：
+//   旧服务端(404)→ legacy，继续用主密钥；密钥错/锁定→ 把原因交给调用方显示；网络不通 → 同 legacy，但调用方会看到后续拉取失败
+async function sessionLogin(raw){
+  if(isSessionTok(raw)) return { ok:true, tok: raw }
+  const r = await Cloud.session(raw)
+  if(r && r.ok && r.token) return { ok:true, tok: r.token }
+  if(r && (r.status === 404 || r.net || r.off)) return { ok:true, tok: raw, legacy:true }
+  return { ok:false, err: cloudErrText(r) }
 }
 function cloudSaveKey(k){
   cloudKey = String(k || '').trim()
@@ -171,6 +199,13 @@ async function cloudPull(silent){
 
   if(!(r && r.ok)){
     cloudErr = cloudErrText(r)
+    // 登录过期：清掉失效的令牌并停掉轮询，请他重新填一次密钥（否则会每 25 秒空转一次 401）
+    if(r && r.error === 'session_expired'){
+      cloudSaveKey(''); cloudPollStop(); cloudReadOK = false
+      renderCloudBar()
+      setTimeout(offerCloudKey, 300)
+      return r
+    }
     renderCloudBar()
     return r || { ok:false }
   }
@@ -260,6 +295,7 @@ function cloudErrText(r){
   if(r.net) return '网络不通'
   if(r.off) return '未配置'
   if(r.error === 'bad_key') return '同步密钥不对'
+  if(r.error === 'session_expired') return '登录已过期，请重新填入密钥'
   if(r.error === 'locked')  return '密钥错太多次，已临时锁定（填入正确密钥可立即解锁）'
   if(r.error === 'rate_limited') return '请求太频繁'
   if(r.error === 'admin_key_not_configured') return '服务端还没配密钥'
@@ -627,7 +663,7 @@ function openCloudKey(){
     <div class="sh-title">开启云端同步</div>
     <div class="sh-sub">
       <b>这是「换设备也能看到全部订单」的那一步。</b><br>
-      把同步密钥粘进来。密钥只存在这台设备的浏览器里，用来证明「拉台账的人是我」。<br>
+      把同步密钥粘进来登录一次。登录后这台设备只保存 30 天有效的登录凭证，<b>不再保存密钥本身</b>；点「断开同步」会让凭证立即作废。<br>
       <b style="color:#EF9F27">不要发给别人。</b>
     </div>
     <textarea class="sh-textarea" id="cloud-key-input" placeholder="同步密钥">${esc(cloudKey)}</textarea>
@@ -644,7 +680,12 @@ function openCloudKey(){
 
 async function doSaveCloudKey(){
   const el = document.getElementById('cloud-key-input')
-  cloudSaveKey(el ? el.value : '')
+  const raw = String(el ? el.value : '').trim()
+  if(!raw){ cloudSaveKey(''); closeSheet(); renderCloudBar(); return }
+  // 先用主密钥换令牌：密钥不对当场说，不用等到后面同步失败才发现
+  const s = await sessionLogin(raw)
+  if(!s.ok){ toast('登录失败：' + s.err); return }
+  cloudSaveKey(s.tok)
   if(!cloudKey){ closeSheet(); renderCloudBar(); return }
   try { localStorage.removeItem(CLOUD_SKIP_STORE) } catch(e){}
   closeSheet()
@@ -660,6 +701,8 @@ async function doSaveCloudKey(){
 
 function doCloudOff(){
   cloudReadOK = false
+  // 通知服务端作废这个令牌（不等结果：断网也不能卡住「断开」）
+  if(cloudKey && isSessionTok(cloudKey) && window.Cloud) Cloud.logout(cloudKey).catch(() => {})
   cloudSaveKey('')
   // 主动断开 = 以后别再自动弹密钥框，但那条告示一直留着
   try { localStorage.setItem(CLOUD_SKIP_STORE, '1') } catch(e){}

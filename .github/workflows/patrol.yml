@@ -1,9 +1,30 @@
 name: 线上巡检
 
+# ============================================================
+#  每小时，从 GitHub 的服务器上检查一次线上订单管道
+# ============================================================
+#
+# 为什么不用 WorkBuddy 里的定时任务做这件事：
+# 那个跑在 DWAY 自己的电脑上，**电脑休眠/关机时不会触发**。
+# 而「后端被回收 / 前端指着旧地址」这两种故障恰恰最容易发生在半夜 ——
+# 那正是电脑最可能睡着的时候。所以这一条必须跑在云上。
+#
+# 检查逻辑在 tools/patrol.sh 里（那个文件我随时能改、改完推送即生效）。
+# 这里只负责「什么时候跑」和「出事了怎么叫人」。
+
 on:
   schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+    # ⚠ 每小时一次。为什么不是每 6 小时：
+    #
+    # GitHub 的定时**不保证准点，高峰期还会直接丢掉某几次**。
+    # 实测踩过：工作流建好后，18:00 那一次过了 1 小时 40 分都没响
+    # （官方说最多延迟约 1 小时）—— 也就是被丢掉了。
+    #
+    # 频率高一点，就算丢掉几次也总会有一次跑起来；
+    # 而且「多久发现故障」从最坏 6 小时压到最坏 1 小时。
+    # 公开仓库跑 Actions 是免费的，不用担心额度。
+    - cron: '0 * * * *'
+  workflow_dispatch:        # 也可以在 Actions 页面手动点一下立刻跑
 
 permissions:
   contents: read
@@ -18,12 +39,29 @@ jobs:
       - name: 跑巡检
         run: bash tools/patrol.sh
 
-      - name: 出问题时开一张单子
+      # 哨兵自己会不会按时跑，它自己的第一条检查是查不出来的 ——
+      # 「不跑」这个事实只有靠这条来暴露。
+      # 同时验证「定时到底被注册上了没有」：手动触发成功 ≠ 定时能跑。
+      - name: 检查哨兵自己还可靠吗（定时有没有在响）
+        run: bash tools/patrol-selfcheck.sh
+
+      # 邮件很容易漏看，Issue 会一直挂在仓库首页 —— 对非技术用户更友好
+      - name: 出问题时开一张单子（已经开着就不重复开）
+        # ⚠ 去重是必须的：每小时一次，坏一整天就是 24 张单子。
+        #   报警一旦变成噪音，就等于没有报警。
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue create --title "⚠️ 线上巡检没通过（$(date -u '+%Y-%m-%d %H:%M') UTC）" --body "自动巡检发现异常，请打开 WorkBuddy 里的「订单同步系统巡检」做深度检查与修复。运行记录：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true
+          open=$(gh issue list --state open --search "线上巡检没通过 in:title" --json number --jq 'length' 2>/dev/null || echo "?")
+          # 只有**明确查到「已经有单子」**时才跳过。
+          # 查不到 / 查出错 / 返回空 —— 一律照样开单：
+          # 宁可重复一张，也不要因为一次查询失败就**静默漏掉一次真故障**。
+          if [ -n "$open" ] && [ "$open" != "0" ] && [ "$open" != "?" ]; then
+            echo "已经有 $open 张未关闭的单子，不重复开。"
+          else
+            gh issue create --title "⚠️ 线上巡检没通过（$(date -u '+%Y-%m-%d %H:%M') UTC）" --body "自动巡检发现异常，请打开 WorkBuddy 里的「订单同步系统巡检」做深度检查与修复。运行记录：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true
+          fi
 
       - name: 恢复正常时自动把单子关掉
         if: success()

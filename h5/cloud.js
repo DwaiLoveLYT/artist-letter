@@ -496,6 +496,29 @@ var Cloud = {
     }).catch(function(){ return { ok:false, net:true } })
   },
 
+  // —— 后台：登录 / 续期（用主密钥或未过期令牌换一个新令牌）——
+  // 浏览器里只该留这个令牌，不留主密钥。服务端版本较旧时是 404，调用方退回旧方式。
+  session: function(key){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    return fetch(CLOUD_BASE + '/api/admin/session', {
+      method: 'POST', headers: { 'X-Admin-Key': key }, cache:'no-store',
+    }).then(function(r){
+      return r.json().catch(function(){ return {} }).then(function(j){
+        j.status = r.status
+        return j
+      })
+    }).catch(function(){ return { ok:false, net:true } })
+  },
+
+  // —— 后台：注销（让服务端立刻作废这个令牌，即使它被别人拿走也没用了）——
+  logout: function(key){
+    if(!CLOUD_BASE) return Promise.resolve({ ok:false, off:true })
+    return fetch(CLOUD_BASE + '/api/admin/session', {
+      method: 'DELETE', headers: { 'X-Admin-Key': key }, cache:'no-store',
+    }).then(function(r){ return r.json().catch(function(){ return {} }) })
+      .catch(function(){ return { ok:false, net:true } })
+  },
+
   // —— 后台：服务端请求留痕（排障用）——
   // 「那台设备到底有没有连上来」这个问题的答案就在这里。
   // 服务端版本较旧时这个接口不存在，会拿到 404 —— 调用方要按 not_found 单独说明，

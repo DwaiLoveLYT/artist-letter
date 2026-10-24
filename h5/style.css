@@ -1122,3 +1122,160 @@ body {
 html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
 /* 标题/副标题断行均衡，避免末尾单独掉一个字 */
 .hero-title, .hero-sub, .card-title { text-wrap:balance; }
+
+/* ==================== 2026-10 改版：航空信 ==================== */
+:root {
+  --ink:#121110; --ink-2:#1b1a18; --paper:#f3ede1; --paper-ink:#1d1b17;
+  --text:#f3ede1; --muted:#a8a397; --air:#c8202f; --air-hi:#e0313f;
+  --navy:#24407a; --gold:#d9a441;
+  --serif:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;
+}
+body { background:var(--ink); color:var(--text); }
+#app { background:var(--ink); }
+.airmail {
+  display:inline-block; width:34px; height:8px; margin-right:8px; vertical-align:1px;
+  border-radius:1px;
+  background:repeating-linear-gradient(135deg,var(--air) 0 6px,var(--paper) 6px 10px,var(--navy) 10px 16px,var(--paper) 16px 20px);
+}
+.airmail-sm { width:22px; height:6px; margin-right:6px; }
+.trust-bar { background:rgba(18,17,16,.94); }
+.trust-location { color:var(--muted); }
+.trust-link { color:var(--paper); background:transparent; border-color:rgba(243,237,225,.28); }
+.hero-section {
+  padding:28px 20px 34px; background:none; position:relative;
+  border-bottom:1px solid rgba(243,237,225,.08);
+}
+.hero-stack { position:relative; width:100%; max-width:360px; aspect-ratio:4/3; margin:6px auto 30px; }
+.hs {
+  position:absolute; left:6%; top:8%; width:88%; height:auto; cursor:zoom-in;
+  border:5px solid var(--paper); border-radius:3px;
+  box-shadow:0 18px 40px rgba(0,0,0,.55);
+  transition:transform .45s cubic-bezier(.2,.7,.2,1);
+}
+.hs-3 { transform:rotate(-9deg) translate(-6%,-4%); }
+.hs-2 { transform:rotate(7deg) translate(7%,2%); }
+.hs-1 { transform:rotate(-1.5deg) translateY(6%); z-index:2; }
+.hero-stack:hover .hs-3 { transform:rotate(-13deg) translate(-12%,-8%); }
+.hero-stack:hover .hs-2 { transform:rotate(11deg) translate(13%,-1%); }
+.hero-stack:hover .hs-1 { transform:rotate(0deg) translateY(3%); }
+.hero-postmark {
+  position:absolute; right:-4px; bottom:-18px; width:96px; z-index:3;
+  color:var(--air); transform:rotate(-14deg); opacity:.92; pointer-events:none;
+}
+.hero-badge {
+  background:none; border:0; padding:0; border-radius:0;
+  font-size:11px; font-weight:700; letter-spacing:2.5px; color:var(--muted); margin-bottom:14px;
+}
+.hero-title {
+  font-family:var(--serif); font-weight:900; font-size:clamp(40px,11.5vw,50px);
+  line-height:1.12; letter-spacing:1px; color:var(--paper); margin-bottom:14px;
+}
+.hero-title em {
+  font-style:normal; color:var(--air-hi);
+  background:linear-gradient(transparent 72%,rgba(200,32,47,.28) 72%);
+}
+.hero-sub { font-size:14.5px; color:var(--muted); margin-bottom:26px; letter-spacing:.3px; }
+.btn {
+  background:var(--air); color:var(--paper); border-radius:10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.18) inset, 0 10px 24px -10px rgba(200,32,47,.75);
+  transition:transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+@media (hover:hover) { .btn:hover { background:var(--air-hi); transform:translateY(-2px); } }
+.btn:active { transform:translateY(0) scale(.985); }
+.btn-ghost { color:var(--paper); border-color:rgba(243,237,225,.26); border-radius:10px; }
+.btn-ghost:hover { border-color:var(--paper); color:var(--paper); }
+.section-title { font-family:var(--serif); font-weight:900; font-size:24px; color:var(--paper); letter-spacing:.5px; }
+.section-more { color:var(--muted); }
+.trust-grid { gap:12px; margin-bottom:24px; }
+.trust-item {
+  background:var(--ink-2); border:1px dashed rgba(243,237,225,.18); border-radius:6px;
+  padding:18px 12px 16px; transition:border-color .2s ease, transform .2s ease;
+}
+@media (hover:hover) { .trust-item:hover { border-color:var(--air); transform:translateY(-2px); } }
+.trust-icon {
+  width:40px; height:40px; margin:0 auto 10px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--air-hi); background:rgba(200,32,47,.12);
+}
+.trust-label { color:var(--paper); font-weight:700; font-size:14.5px; }
+.trust-desc { color:var(--muted); }
+.price-card {
+  position:relative; background:var(--paper); color:var(--paper-ink);
+  border:0; border-radius:4px; padding:24px 22px 20px; margin:6px 4px 28px;
+  box-shadow:0 22px 40px -18px rgba(0,0,0,.8);
+  -webkit-mask:radial-gradient(circle 5px at 5px 50%,transparent 98%,#000) -5px 0/100% 14px repeat-y;
+}
+.price-card::before {
+  content:""; position:absolute; left:0; right:0; top:0; height:6px;
+  background:repeating-linear-gradient(135deg,var(--air) 0 10px,var(--paper) 10px 16px,var(--navy) 16px 26px,var(--paper) 26px 32px);
+}
+.price-label { color:#5c574d; font-weight:700; letter-spacing:1px; }
+.price-tag { color:var(--air); background:rgba(200,32,47,.1); font-weight:700; }
+.price-currency { color:var(--paper-ink); font-family:var(--serif); font-weight:900; font-size:24px; }
+.price-number { color:var(--paper-ink); font-family:var(--serif); font-weight:900; font-size:72px; line-height:1; letter-spacing:-2px; }
+.price-unit { color:#5c574d; }
+.include-row { color:#2c2924; border-bottom:1px dashed rgba(29,27,23,.16); font-size:14.5px; }
+.check { color:var(--air); }
+.price-note { background:rgba(29,27,23,.06); color:#45413a; }
+.price-note .warning {
+  width:18px; height:18px; border-radius:50%; background:var(--air); color:var(--paper);
+  font-size:12px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; margin-top:1px;
+}
+/* 左右两侧齿孔：两层遮罩取交集 */
+.price-card {
+  --hole:radial-gradient(circle 5px,transparent 96%,#000 100%);
+  -webkit-mask:var(--hole) -5px 0/10px 14px repeat-y, var(--hole) calc(100% + 5px) 0/10px 14px repeat-y, linear-gradient(#000 0 0) 5px 0/calc(100% - 10px) 100% no-repeat;
+  mask:var(--hole) -5px 0/10px 14px repeat-y, var(--hole) calc(100% + 5px) 0/10px 14px repeat-y, linear-gradient(#000 0 0) 5px 0/calc(100% - 10px) 100% no-repeat;
+}
+.timeline-item { border-left:2px dashed rgba(243,237,225,.16); }
+.timeline-num {
+  background:var(--ink); border:2px solid var(--air); color:var(--paper);
+  font-family:var(--serif); font-weight:900;
+}
+.timeline-title { color:var(--paper); font-weight:700; }
+.timeline-desc { color:var(--muted); }
+.gallery { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.gallery-img {
+  width:100%; height:auto; aspect-ratio:4/3; border-radius:3px; border:3px solid var(--paper);
+  transition:transform .25s ease;
+}
+@media (hover:hover) { .gallery-img:hover { transform:rotate(-2deg) scale(1.04); } }
+.faq-item { background:var(--ink-2); border-radius:6px; }
+.faq-item.open { border-color:rgba(200,32,47,.5); }
+.faq-item.open .faq-arrow { color:var(--air-hi); }
+.faq-a { color:var(--muted); }
+.bottom-cta {
+  background:var(--ink-2); border:1px solid rgba(243,237,225,.1); border-radius:6px;
+  position:relative; overflow:hidden; padding-top:38px;
+}
+.bottom-cta::before {
+  content:""; position:absolute; left:0; right:0; top:0; height:6px;
+  background:repeating-linear-gradient(135deg,var(--air) 0 10px,var(--paper) 10px 16px,var(--navy) 16px 26px,var(--paper) 26px 32px);
+}
+.bottom-cta-title { font-family:var(--serif); font-weight:900; font-size:28px; color:var(--paper); }
+.bottom-cta-desc { color:var(--muted); }
+.bottom-cta .btn-ghost { margin-top:10px; }
+.bottom-cta-contact b { color:var(--gold); }
+.rv-on .reveal { opacity:0; transform:translateY(18px); transition:opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+.rv-on .reveal.in { opacity:1; transform:none; }
+.hero-stack .hs, .hero-title, .hero-sub, .hero-cta { animation:heroIn .7s cubic-bezier(.2,.7,.2,1) both; }
+.hero-stack .hs-2 { animation-delay:.08s; } .hero-stack .hs-1 { animation-delay:.16s; }
+.hero-title { animation-delay:.22s; } .hero-sub { animation-delay:.3s; } .hero-cta { animation-delay:.38s; }
+@keyframes heroIn { from { opacity:0; translate:0 20px; } to { opacity:1; translate:0 0; } }
+:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation:none !important; transition:none !important; }
+  .reveal { opacity:1; transform:none; }
+}
+/* 桌面端：手机宽度的主体居中，两侧用航空信纹样和纸张色，不把页面硬拉宽 */
+@media (min-width:760px) {
+  body {
+    background:
+      repeating-linear-gradient(135deg,var(--air) 0 14px,var(--paper) 14px 22px,var(--navy) 22px 36px,var(--paper) 36px 44px) top/100% 10px no-repeat,
+      radial-gradient(1200px 600px at 50% 20%,#24211d 0%,#0c0b0a 70%);
+    background-attachment:fixed;
+    padding:40px 0;
+  }
+  #app { max-width:460px; border-radius:14px; overflow:clip; box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(243,237,225,.08); }
+  .trust-bar { border-radius:14px 14px 0 0; }
+}

@@ -1120,7 +1120,7 @@ function renderDetail(id){
              视频自己出第一帧要好几秒 —— 看着像加载不出来。
              封面是几十 KB 的小图，卡片秒出；真正点开播放才去下视频。 -->
         <video class="media" style="height:200px;" src="${mUrl(vid)}"${vid.poster && mUrl(vid.poster) ? ` poster="${mUrl(vid.poster)}"` : ''} controls playsinline preload="metadata"></video>
-        <div class="tiny" style="margin-top:8px;">一镜到底，从信封到投进邮筒全程不剪辑</div>
+        <div class="tiny" style="margin-top:8px;">拍到信封、邮票和投进邮筒的过程</div>
       </div>
     `:''}
     ${o.admin_note?`

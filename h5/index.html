@@ -57,7 +57,7 @@
       <div class="trust-item">
         <div class="trust-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="1.5"/><path d="M16 10l5-3v10l-5-3z"/></svg></div>
         <div class="trust-label">投递视频</div>
-        <div class="trust-desc">一镜到底，不可伪造</div>
+        <div class="trust-desc">寄出过程全程录像留证</div>
       </div>
       <div class="trust-item">
         <div class="trust-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
@@ -86,6 +86,9 @@
       </div>
       <div class="price-note">
         <span class="warning" aria-hidden="true">!</span> 我只负责寄送，不保证艺人回信。手绘信封的意义是提高「被拆开」的概率。
+      </div>
+      <div class="price-note price-note-guard">
+        <span class="warning" aria-hidden="true">✓</span> 寄出满 3 个月仍没有回信，一年内可免费重寄 1 次（不含重画信封，重寄同样不保证回信）。
       </div>
     </div>
 
@@ -130,14 +133,14 @@
           <div class="timeline-num">04</div>
           <div class="timeline-body">
             <div class="timeline-title">贴票投递</div>
-            <div class="timeline-desc">贴好中国邮票与国际邮票，录制一镜到底投递视频，证明确实寄出。</div>
+            <div class="timeline-desc">贴好中国邮票与国际邮票，把信封投进邮筒的过程录下来，作为寄出凭证。</div>
           </div>
         </div>
         <div class="timeline-item">
           <div class="timeline-num">05</div>
           <div class="timeline-body">
             <div class="timeline-title">等待回音</div>
-            <div class="timeline-desc">国际平信 4–8 周。无退回通常表示已送达艺人团队。之后就是等待。</div>
+            <div class="timeline-desc">国际平信一般 4–8 周，途中无法逐站追踪。没被退回只说明信没有退件，不代表艺人已经看到。</div>
           </div>
         </div>
       </div>
@@ -154,12 +157,16 @@
           <div class="faq-a">不能。我提供的是「寄送服务」，不是「回信保证」。我能做的是：手绘信封提高被注意的概率，贴好回信邮票降低对方回信的成本。</div>
         </div>
         <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">一直没回信，能重寄吗？<span class="faq-arrow">›</span></div>
+          <div class="faq-a">可以。信寄出满 3 个月仍没有回信，一年内免费重寄 1 次，不含重画信封。重寄用的是你原来的信件，所以寄出前我会把它扫描留底，保障期结束后删除。重寄同样不保证回信，回不回由艺人本人和团队决定。</div>
+        </div>
+        <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">为什么不用挂号信？<span class="faq-arrow">›</span></div>
           <div class="faq-a">挂号信需要收件人本人签收。艺人本人不会自己收信，大概率被助理拒收。平信反而是更稳的选择。</div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">怎么证明你真的寄了？<span class="faq-arrow">›</span></div>
-          <div class="faq-a">每笔订单附一镜到底投递视频，从信封正面到投进邮筒全程不剪辑。这是目前最强的不可伪造凭证。</div>
+          <div class="faq-a">每笔订单附投递视频：拍到信封正面、贴好的邮票，以及信封被投进邮筒的过程。这是你能拿到的寄出凭证。</div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">付款后多久能画好？<span class="faq-arrow">›</span></div>
@@ -223,7 +230,7 @@
       </div>
       <div class="field" style="margin-bottom:14px;">
         <label class="label">收信地址（英文）<span class="req" id="recipient-req">*</span></label>
-        <textarea class="textarea" id="o-recipient" placeholder="艺人工作室 / 经纪公司 / Fan mail 地址&#10;不知道精确地址就填城市或国家，我负责帮你查最新的" maxlength="500"></textarea>
+        <textarea class="textarea" id="o-recipient" placeholder="艺人经纪公司或 Fan mail 地址（英文）" maxlength="500"></textarea>
         <div class="field-hint" id="recipient-hint">不知道精确地址就填城市或国家，我负责帮你查最新的</div>
       </div>
 
@@ -370,8 +377,8 @@
       <div class="card-title">在这台设备没看到订单？</div>
       <div class="lookup-sub">订单保存在你当时下单的那台浏览器里。换个手机、清缓存、换浏览器，就看不到。<br>用<b>订单号 + 手机号后 4 位</b>可以查回任意设备下的单。</div>
       <div class="lookup-form">
-        <input class="input lookup-input" id="lookup-no" placeholder="订单号（AL20261004ABCDEF）" autocapitalize="characters" spellcheck="false">
-        <input class="input lookup-input" id="lookup-phone" placeholder="下单手机号后 4 位" inputmode="numeric" maxlength="4" pattern="\d{4}">
+        <input class="input lookup-input" id="lookup-no" placeholder="订单号" autocapitalize="characters" spellcheck="false">
+        <input class="input lookup-input" id="lookup-phone" placeholder="手机号后 4 位" inputmode="numeric" maxlength="4" pattern="\d{4}">
         <button class="btn lookup-btn" onclick="lookupOrder()">查询这一单</button>
       </div>
       <div id="lookup-result"></div>
@@ -388,7 +395,7 @@
     <div id="track-tools"></div>
     <div id="track-list"></div>
     <div class="empty-state" id="track-empty">
-      <div class="empty-icon">📭</div>
+      <div class="empty-icon"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="1.5"/><path d="M3.5 7l8.5 6 8.5-6"/></svg></div>
       <div class="empty-title">这台设备上还没有订单</div>
       <div class="empty-desc">用上面那张卡片查一下别的设备下的单</div>
       <button class="btn" onclick="goPage('order')">去下单</button>

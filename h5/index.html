@@ -17,7 +17,7 @@
 
 <!-- ==================== 顶部条（吸顶 · 常驻订单入口） ==================== -->
 <div class="trust-bar">
-  <span class="trust-location">📍 深圳寄出 · 原创手绘设计</span>
+  <span class="trust-location"><span class="airmail airmail-sm" aria-hidden="true"></span>深圳寄出 · 原创手绘设计</span>
   <a class="trust-link" role="button" tabindex="0" onclick="goPage('track')">我的订单 ›</a>
 </div>
 
@@ -26,8 +26,14 @@
   <div class="hero-section">
     <!-- 有手绘信封实拍图时，图会出现在这里（填 app.js 里的 SHOWCASE 数组即可） -->
     <div class="hero-figure" id="hero-figure"></div>
-    <div class="hero-badge">HAND-PAINTED ENVELOPES</div>
-    <h1 class="hero-title">把你的信<br>寄到他手上</h1>
+    <div class="hero-stack" aria-label="手绘信封实拍">
+      <img class="hs hs-3" src="images/env-ironman.jpg" alt="钢铁侠手绘信封" width="960" height="668" decoding="async" onclick="previewImage(this.src)">
+      <img class="hs hs-2" src="images/env-spider.jpg" alt="蜘蛛侠手绘信封" width="960" height="540" decoding="async" onclick="previewImage(this.src)">
+      <img class="hs hs-1" src="images/env-jack.jpg" alt="杰克船长手绘信封" width="960" height="668" fetchpriority="high" onclick="previewImage(this.src)">
+      <svg class="hero-postmark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="60" cy="60" r="42" fill="none" stroke="currentColor" stroke-width="1.5"/><path id="pm" d="M60 60 m-48 0 a48 48 0 1 1 96 0 a48 48 0 1 1 -96 0" fill="none"/><text font-size="11" font-weight="700" letter-spacing="3" fill="currentColor"><textPath href="#pm">SHENZHEN · AIR MAIL · PAR AVION ·</textPath></text><text x="60" y="58" text-anchor="middle" font-size="22" font-weight="800" fill="currentColor">¥190</text><text x="60" y="76" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="1.5" fill="currentColor">全包价</text></svg>
+    </div>
+    <div class="hero-badge"><span class="airmail" aria-hidden="true"></span>HAND-PAINTED · AIR MAIL</div>
+    <h1 class="hero-title">把你的信<br>寄到<em>他</em>手上</h1>
     <p class="hero-sub">一对一欧美艺人代寄 · 全手绘信封 · 投递视频凭证</p>
     <div class="hero-cta">
       <button class="btn btn-large" onclick="goPage('order')">立即下单 ¥190</button>
@@ -37,31 +43,31 @@
 
   <div class="wrap">
     <!-- 信任背书 -->
-    <div class="trust-grid">
+    <div class="trust-grid reveal">
       <div class="trust-item">
-        <div class="trust-icon">✉️</div>
+        <div class="trust-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 7l9 6 9-6"/></svg></div>
         <div class="trust-label">手绘信封 ×2</div>
         <div class="trust-desc">寄出信封 + 回信信封</div>
       </div>
       <div class="trust-item">
-        <div class="trust-icon">🎫</div>
+        <div class="trust-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18H5z" stroke-dasharray="2 2"/><rect x="8" y="7" width="8" height="8"/></svg></div>
         <div class="trust-label">邮票全包</div>
         <div class="trust-desc">中国寄出 + 目的国回信邮票</div>
       </div>
       <div class="trust-item">
-        <div class="trust-icon">🎥</div>
+        <div class="trust-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="1.5"/><path d="M16 10l5-3v10l-5-3z"/></svg></div>
         <div class="trust-label">投递视频</div>
         <div class="trust-desc">一镜到底，不可伪造</div>
       </div>
       <div class="trust-item">
-        <div class="trust-icon">📍</div>
+        <div class="trust-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
         <div class="trust-label">地址代查</div>
         <div class="trust-desc">不知道寄哪？我帮你查最新的</div>
       </div>
     </div>
 
     <!-- 价格 -->
-    <div class="price-card">
+    <div class="price-card reveal">
       <div class="price-header">
         <span class="price-label">一单全包价</span>
         <span class="price-tag">无隐形费用</span>
@@ -79,7 +85,7 @@
         <div class="include-row"><span class="check">✓</span> 全程进度可查</div>
       </div>
       <div class="price-note">
-        <span class="warning">⚠</span> 我只负责寄送，不保证艺人回信。手绘信封的意义是提高「被拆开」的概率。
+        <span class="warning" aria-hidden="true">!</span> 我只负责寄送，不保证艺人回信。手绘信封的意义是提高「被拆开」的概率。
       </div>
     </div>
 
@@ -93,7 +99,7 @@
     </div>
 
     <!-- 流程 -->
-    <div class="section" id="how-section">
+    <div class="section reveal" id="how-section">
       <div class="section-header">
         <h2 class="section-title">服务流程</h2>
         <span class="section-more">五步完成</span>
@@ -170,7 +176,7 @@
     <div id="contact-home"></div>
 
     <!-- 底部 CTA -->
-    <div class="bottom-cta">
+    <div class="bottom-cta reveal">
       <div class="bottom-cta-title">准备好了吗？</div>
       <div class="bottom-cta-desc">填写信息 → 付款 → 等图 → 寄出。全程可查。</div>
       <button class="btn btn-large" onclick="goPage('order')">立即下单 ¥190</button>

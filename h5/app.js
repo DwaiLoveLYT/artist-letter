@@ -159,7 +159,7 @@ function scrollToHow(){
 // ==================== 首页 ====================
 // 往这里丢实拍图路径即可。SHOWCASE[0] 会同时成为首页主视觉，
 // 全部图片进作品墙 —— 一次填写，点亮两处。
-const SHOWCASE=[]
+const SHOWCASE=['images/env-jack.jpg','images/env-jack-back.jpg','images/env-ironman.jpg','images/env-spider.jpg','images/env-spider-back.jpg']
 
 // 主视觉「图片就绪」：
 // 这个页面卖的是手绘信封 —— 一件纯视觉的手工件，但整站原本没有一张产品图，
@@ -170,7 +170,7 @@ function initHero(){
   const fig=document.getElementById('hero-figure')
   if(!fig) return
   const src=SHOWCASE[0]
-  if(!src){ fig.style.display='none'; return }
+  if(!src || document.querySelector('.hero-stack')){ fig.style.display='none'; return }
   fig.style.display='block'
   fig.innerHTML=`<img class="hero-figure-img" src="${escapeHtml(src)}" alt="手绘信封实拍" onclick="previewImage(this.src)">`
 }
@@ -184,7 +184,7 @@ function initHome(){
   sec.style.display = SHOWCASE.length ? 'block' : 'none'
   if(SHOWCASE.length){
     document.getElementById('showcase-gallery').innerHTML=SHOWCASE.map(src=>
-      `<img class="gallery-img" src="${escapeHtml(src)}" onclick="previewImage(this.src)">`
+      `<img class="gallery-img" src="${escapeHtml(src)}" alt="手绘信封作品" loading="lazy" decoding="async" onclick="previewImage(this.src)">`
     ).join('')
   }
 }
@@ -1287,3 +1287,17 @@ document.addEventListener('keydown', function(e){
   e.preventDefault()
   t.click()
 })
+
+
+// 滚动渐显：只做一次，不监听 scroll 事件；减少动态效果的用户直接显示
+;(function(){
+  const els=document.querySelectorAll('.reveal')
+  if(!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches){
+    els.forEach(e=>e.classList.add('in')); return
+  }
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target) }
+  }),{rootMargin:'0px 0px -8% 0px'})
+  document.documentElement.classList.add('rv-on')
+  els.forEach(e=>io.observe(e))
+})()

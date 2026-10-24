@@ -5,7 +5,7 @@ const CONTACTS = {
   weekday: { label:'工作日', range:'周一至周五', id:'ymzx0618' },
   weekend: { label:'周末',   range:'周六、周日', id:'IMDWAY' },
 }
-const TZ_NOTE = '有北美时差，回复不是秒回。看到就会回你，请耐心等一等。'
+const TZ_NOTE = '有北美时差，不是秒回，看到就会回你。'
 
 function todayContact(){
   const d = new Date().getDay()              // 0 = 周日, 6 = 周六

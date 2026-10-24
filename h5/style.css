@@ -1286,3 +1286,10 @@ body { background:var(--ink); color:var(--text); }
 .empty-icon { color:var(--gold); display:flex; justify-content:center; }
 #track-empty .btn { margin-top:6px; }
 #track-empty .btn-ghost { margin-top:14px; }
+
+/* 2026-10-25 作品墙：6 列栅格，单数张时最后一行平分，不留空格 */
+#showcase-gallery { grid-template-columns:repeat(6,1fr); gap:10px; }
+#showcase-gallery .gallery-img { grid-column:span 2; }
+#showcase-gallery .gallery-img:nth-child(3n+1):nth-last-child(2),
+#showcase-gallery .gallery-img:nth-child(3n+2):last-child { grid-column:span 3; }
+#showcase-gallery .gallery-img:nth-child(3n+1):last-child { grid-column:span 6; }
